@@ -8,7 +8,7 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 .
 ├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, and local data.
 ├── README.md                                      - Project overview, current scope, and repository conventions.
-├── main.py                                        - Minimal CLI entrypoint placeholder.
+├── main.py                                        - CLI entrypoint for local data bootstrap tasks.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
 ├── uv.lock                                        - Locked dependency resolution for `uv`.
 ├── conf/
@@ -17,12 +17,13 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 │   │   └── parameters.yml                         - Runtime preprocessing parameters such as split ratios and outlier threshold.
 │   └── local/                                     - Local Kedro environment directory required by the default config loader.
 ├── notebooks/
-│   └── EDA.ipynb                                  - Exploratory notebook that authenticates with Kaggle, downloads the dataset locally, and inspects distributions and missing values.
+│   └── EDA.ipynb                                  - Exploratory notebook that reads the locally prepared dataset and inspects distributions and missing values.
 ├── src/
 │   ├── __init__.py                                - Package marker for shared source code.
 │   ├── project_paths.py                           - Repo-root and data-path helpers used by notebooks and scripts.
 │   └── mlops_project/
 │       ├── __init__.py                            - Kedro project package marker.
+│       ├── data_setup.py                          - Interactive Kaggle credential bootstrap and dataset download helper.
 │       ├── datasets.py                            - Local Kedro dataset implementations for CSV and pickle persistence.
 │       ├── pipeline_registry.py                   - Registers the preprocessing pipeline and sets it as the default Kedro pipeline.
 │       ├── settings.py                            - Project settings entrypoint for Kedro.
@@ -34,6 +35,7 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 │               └── pipeline.py                    - Kedro node graph for the preprocessing workflow.
 └── tests/
     ├── __init__.py                                - Test package marker.
+    ├── test_data_setup.py                         - Unit tests for interactive credential bootstrap, dataset download, and CLI behavior.
     └── pipelines/
         ├── __init__.py                            - Pipeline test package marker.
         └── preprocessing/
@@ -45,19 +47,14 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 ## Local Data Setup
 
 1. Install dependencies with `uv sync`.
-2. Create the Kaggle credentials directory with `mkdir -p ~/.kaggle`.
-3. Create `~/.kaggle/kaggle.json` with this shape:
-
-   ```json
-   {
-     "username": "<your-kaggle-username>",
-     "key": "<your-kaggle-api-key>"
-   }
-   ```
-
-4. Generate the API key from `https://www.kaggle.com/settings/api`.
-5. Restrict file permissions with `chmod 600 ~/.kaggle/kaggle.json`.
-6. Run the download cell in `notebooks/EDA.ipynb` to fetch `water_potability.csv` into local `data/raw/`.
+2. Run `uv run python main.py setup-data`.
+3. If `~/.kaggle/kaggle.json` is missing, the script will:
+   - explain that Kaggle API credentials are required
+   - link you to `https://www.kaggle.com/settings/api`
+   - ask whether you want it to create `~/.kaggle/kaggle.json`
+   - prompt for `username` and `key`
+   - set file permissions to `600`
+4. The script then downloads `adityakadiwal/water-potability` into local `data/raw/`.
 
 `data/` is intentionally local-only and ignored by Git. That includes the downloaded raw CSV and generated Kedro outputs under `data/03_primary/`.
 
@@ -74,7 +71,7 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 ## Running The Pipeline
 
 1. Install dependencies with `uv sync`.
-2. Ensure `data/raw/water_potability.csv` has been downloaded locally from `notebooks/EDA.ipynb`.
+2. Run `uv run python main.py setup-data` to prepare `data/raw/water_potability.csv`.
 3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`.
 4. Inspect persisted local outputs under `data/03_primary/`.
 

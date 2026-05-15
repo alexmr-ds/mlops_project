@@ -1,0 +1,9 @@
+preprocessing:
+  target_column: Potability
+  feature_columns: null
+  test_size: 0.15
+  validation_size: 0.15
+  random_state: 42
+  shuffle: true
+  stratify: true
+  zscore_threshold: 3.0

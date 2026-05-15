@@ -1,0 +1,39 @@
+water_potability:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/raw/water_potability.csv
+
+X_train_split:
+  type: kedro.io.MemoryDataset
+X_validation_split:
+  type: kedro.io.MemoryDataset
+X_test_split:
+  type: kedro.io.MemoryDataset
+y_train_split:
+  type: kedro.io.MemoryDataset
+X_train_filtered:
+  type: kedro.io.MemoryDataset
+X_train_imputed:
+  type: kedro.io.MemoryDataset
+X_validation_imputed:
+  type: kedro.io.MemoryDataset
+X_test_imputed:
+  type: kedro.io.MemoryDataset
+
+X_train:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/X_train.pkl
+X_validation:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/X_validation.pkl
+X_test:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/X_test.pkl
+y_train:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/y_train.pkl
+y_validation:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/y_validation.pkl
+y_test:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/y_test.pkl

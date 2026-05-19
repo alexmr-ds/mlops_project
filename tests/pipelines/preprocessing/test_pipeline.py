@@ -13,14 +13,17 @@ class PipelineTests(unittest.TestCase):
         pipeline = create_pipeline()
         node_names = [pipeline_node.name for pipeline_node in pipeline.nodes]
 
-        self.assertEqual(len(node_names), 4)
+        self.assertEqual(len(node_names), 7)
         self.assertListEqual(
             node_names,
             [
                 'split_dataset_node',
+                'engineer_features_node',
                 'remove_training_outliers_node',
                 'impute_features_node',
                 'scale_features_node',
+                'select_features_rfe_node',
+                'apply_selected_features_node',
             ],
         )
 

@@ -16,10 +16,19 @@ class SplitDatasetTests(unittest.TestCase):
             'target_column': 'Potability',
             'test_size': 0.15,
             'validation_size': 0.15,
-            'random_state': 42,
+            'random_state': 73,
             'shuffle': True,
             'stratify': True,
             'zscore_threshold': 3.0,
+            'rfe': {
+                'enabled': True,
+                'step': 1,
+                'cv_folds': 5,
+                'scoring': 'roc_auc',
+                'n_jobs': -1,
+                'logistic_max_iter': 5000,
+                'random_state': 73,
+            },
         }
         labels = [0, 1] * 20
         self.data = pd.DataFrame(
@@ -61,6 +70,64 @@ class SplitDatasetTests(unittest.TestCase):
         self.assertEqual(len(y_test), 6)
 
 
+class FeatureEngineeringTests(unittest.TestCase):
+    """Tests for deterministic feature engineering."""
+
+    def test_engineer_features_adds_requested_columns(self) -> None:
+        X_train = pd.DataFrame(
+            {
+                'ph': [7.0, 9.0],
+                'Hardness': [200.0, 150.0],
+                'Solids': [500.0, 0.0],
+                'Conductivity': [250.0, 0.0],
+                'Sulfate': [260.0, 401.0],
+                'Chloramines': [3.0, 11.0],
+                'Turbidity': [6.0, 4.0],
+                'Organic_carbon': [10.0, 8.0],
+                'Trihalomethanes': [90.0, 70.0],
+            }
+        )
+        X_validation = X_train.iloc[0:0].copy()
+        X_test = X_train.iloc[[0]].copy()
+
+        engineered_train, engineered_validation, engineered_test = nodes.engineer_features(
+            X_train, X_validation, X_test
+        )
+
+        self.assertAlmostEqual(engineered_train.loc[0, 'conductivity_solids_ratio'], 0.5, places=6)
+        self.assertTrue(np.isfinite(engineered_train.loc[1, 'conductivity_solids_ratio']))
+        self.assertEqual(engineered_train.loc[0, 'turbidity_trihalo_risk'], 1)
+        self.assertEqual(engineered_train.loc[1, 'risk_score'], 3)
+        self.assertEqual(engineered_train.loc[0, 'expanded_risk_score'], 3)
+        self.assertEqual(engineered_train.loc[1, 'expanded_risk_score'], 4)
+        self.assertEqual(engineered_train.loc[0, 'ph_safe_range'], 1)
+        self.assertEqual(engineered_train.loc[1, 'high_chloramines'], 1)
+        self.assertEqual(engineered_train.loc[0, 'high_hardness'], 0)
+        self.assertIn('organic_trihalo_interaction', engineered_train.columns)
+        self.assertListEqual(engineered_validation.columns.tolist(), X_validation.columns.tolist())
+        self.assertEqual(engineered_test.shape[1], engineered_train.shape[1])
+
+    def test_engineer_features_preserves_missing_values_for_downstream_imputation(self) -> None:
+        X_train = pd.DataFrame(
+            {
+                'ph': [7.0],
+                'Hardness': [200.0],
+                'Solids': [500.0],
+                'Conductivity': [250.0],
+                'Sulfate': [260.0],
+                'Chloramines': [np.nan],
+                'Turbidity': [6.0],
+                'Organic_carbon': [10.0],
+                'Trihalomethanes': [90.0],
+            }
+        )
+
+        engineered_train, _, _ = nodes.engineer_features(X_train, X_train.iloc[0:0], X_train.iloc[0:0])
+
+        self.assertTrue(np.isnan(engineered_train.loc[0, 'chloramines_ph_interaction']))
+        self.assertTrue(np.isnan(engineered_train.loc[0, 'disinfection_stress']))
+
+
 class OutlierRemovalTests(unittest.TestCase):
     """Tests for training outlier removal."""
 
@@ -94,35 +161,6 @@ class OutlierRemovalTests(unittest.TestCase):
 
         self.assertEqual(len(filtered_X), 3)
         self.assertEqual(len(filtered_y), 3)
-
-
-class ScalingTests(unittest.TestCase):
-    """Tests for standard scaling."""
-
-    def test_scale_features_preserves_columns_and_centers_train_data(self) -> None:
-        X_train = pd.DataFrame({'ph': [1.0, 2.0, 3.0], 'Hardness': [10.0, 20.0, 30.0]})
-        X_validation = pd.DataFrame({'ph': [4.0], 'Hardness': [40.0]})
-        X_test = pd.DataFrame({'ph': [5.0], 'Hardness': [50.0]})
-
-        scaled_train, scaled_validation, scaled_test = nodes.scale_features(
-            X_train, X_validation, X_test
-        )
-
-        self.assertListEqual(scaled_train.columns.tolist(), ['ph', 'Hardness'])
-        self.assertTrue(np.allclose(scaled_train.mean().to_numpy(), [0.0, 0.0]))
-        self.assertTrue(np.allclose(scaled_train.std(ddof=0).to_numpy(), [1.0, 1.0]))
-        self.assertEqual(scaled_validation.shape, (1, 2))
-        self.assertEqual(scaled_test.shape, (1, 2))
-
-    def test_scale_features_keeps_empty_validation_split(self) -> None:
-        X_train = pd.DataFrame({'ph': [1.0, 2.0], 'Hardness': [10.0, 20.0]})
-        X_validation = pd.DataFrame(columns=['ph', 'Hardness'])
-        X_test = pd.DataFrame({'ph': [3.0], 'Hardness': [30.0]})
-
-        _, scaled_validation, _ = nodes.scale_features(X_train, X_validation, X_test)
-
-        self.assertTrue(scaled_validation.empty)
-        self.assertListEqual(scaled_validation.columns.tolist(), ['ph', 'Hardness'])
 
 
 class ImputationTests(unittest.TestCase):
@@ -161,6 +199,97 @@ class ImputationTests(unittest.TestCase):
 
         self.assertTrue(imputed_validation.empty)
         self.assertListEqual(imputed_validation.columns.tolist(), ['ph', 'Hardness'])
+
+
+class ScalingTests(unittest.TestCase):
+    """Tests for standard scaling."""
+
+    def test_scale_features_preserves_columns_and_centers_train_data(self) -> None:
+        X_train = pd.DataFrame({'ph': [1.0, 2.0, 3.0], 'Hardness': [10.0, 20.0, 30.0]})
+        X_validation = pd.DataFrame({'ph': [4.0], 'Hardness': [40.0]})
+        X_test = pd.DataFrame({'ph': [5.0], 'Hardness': [50.0]})
+
+        scaled_train, scaled_validation, scaled_test = nodes.scale_features(
+            X_train, X_validation, X_test
+        )
+
+        self.assertListEqual(scaled_train.columns.tolist(), ['ph', 'Hardness'])
+        self.assertTrue(np.allclose(scaled_train.mean().to_numpy(), [0.0, 0.0]))
+        self.assertTrue(np.allclose(scaled_train.std(ddof=0).to_numpy(), [1.0, 1.0]))
+        self.assertEqual(scaled_validation.shape, (1, 2))
+        self.assertEqual(scaled_test.shape, (1, 2))
+
+    def test_scale_features_keeps_empty_validation_split(self) -> None:
+        X_train = pd.DataFrame({'ph': [1.0, 2.0], 'Hardness': [10.0, 20.0]})
+        X_validation = pd.DataFrame(columns=['ph', 'Hardness'])
+        X_test = pd.DataFrame({'ph': [3.0], 'Hardness': [30.0]})
+
+        _, scaled_validation, _ = nodes.scale_features(X_train, X_validation, X_test)
+
+        self.assertTrue(scaled_validation.empty)
+        self.assertListEqual(scaled_validation.columns.tolist(), ['ph', 'Hardness'])
+
+
+class FeatureSelectionTests(unittest.TestCase):
+    """Tests for RFECV selection and holdout masking."""
+
+    def test_select_features_rfe_returns_selected_training_columns(self) -> None:
+        row_count = 30
+        signal = np.array([0] * 15 + [1] * 15)
+        noise = np.tile([0.2, -0.2, 0.1], 10)
+        weak_signal = signal * 0.3 + noise
+        X_train = pd.DataFrame(
+            {
+                'signal': signal.astype(float),
+                'weak_signal': weak_signal.astype(float),
+                'noise': np.linspace(-1.0, 1.0, row_count),
+            }
+        )
+        y_train = pd.Series(signal)
+        parameters = {
+            'rfe': {
+                'enabled': True,
+                'step': 1,
+                'cv_folds': 3,
+                'scoring': 'roc_auc',
+                'n_jobs': -1,
+                'logistic_max_iter': 5000,
+                'random_state': 73,
+            }
+        }
+
+        selected_train, selected_features = nodes.select_features_rfe(
+            X_train, y_train, parameters
+        )
+
+        self.assertGreaterEqual(len(selected_features), 1)
+        self.assertListEqual(selected_train.columns.tolist(), selected_features)
+        self.assertTrue(set(selected_features).issubset(X_train.columns))
+
+    def test_apply_selected_features_projects_validation_and_test(self) -> None:
+        X_validation = pd.DataFrame({'a': [1.0], 'b': [2.0], 'c': [3.0]}, index=[20])
+        X_test = pd.DataFrame({'a': [4.0], 'b': [5.0], 'c': [6.0]}, index=[30])
+        selected_features = ['c', 'a']
+
+        selected_validation, selected_test = nodes.apply_selected_features(
+            X_validation, X_test, selected_features
+        )
+
+        self.assertListEqual(selected_validation.columns.tolist(), selected_features)
+        self.assertListEqual(selected_test.columns.tolist(), selected_features)
+        self.assertEqual(selected_validation.loc[20, 'c'], 3.0)
+        self.assertEqual(selected_test.loc[30, 'a'], 4.0)
+
+    def test_apply_selected_features_keeps_empty_validation_split(self) -> None:
+        X_validation = pd.DataFrame(columns=['a', 'b'])
+        X_test = pd.DataFrame({'a': [1.0], 'b': [2.0]})
+
+        selected_validation, _ = nodes.apply_selected_features(
+            X_validation, X_test, ['b']
+        )
+
+        self.assertTrue(selected_validation.empty)
+        self.assertListEqual(selected_validation.columns.tolist(), ['b'])
 
 
 if __name__ == '__main__':

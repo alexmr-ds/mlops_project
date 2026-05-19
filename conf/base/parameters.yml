@@ -3,7 +3,15 @@ preprocessing:
   feature_columns: null
   test_size: 0.15
   validation_size: 0.15
-  random_state: 42
+  random_state: 73
   shuffle: true
   stratify: true
   zscore_threshold: 3.0
+  rfe:
+    enabled: true
+    step: 1
+    cv_folds: 10
+    scoring: roc_auc
+    n_jobs: -1
+    logistic_max_iter: 5000
+    random_state: 73

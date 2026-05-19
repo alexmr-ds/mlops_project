@@ -1,23 +1,27 @@
 # MLOps Project
 
-Current scope: Kedro-based preprocessing for the water potability dataset, including local Kaggle data download, stratified splitting, training-only outlier removal, mean imputation, and standard scaling, with exploratory analysis still available under `notebooks/`.
+Current scope: Kedro-based preprocessing for the water potability dataset, including local Kaggle data download, stratified splitting, split-wise feature engineering, training-only outlier removal, mean imputation, standard scaling, and RFECV-based feature selection, with exploratory analysis still available under `notebooks/`.
 
 ## Repository Tree
 
 ```text
 .
 ├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, and local data.
-├── README.md                                      - Project overview, current scope, and repository conventions.
+├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
 ├── main.py                                        - CLI entrypoint for local data bootstrap tasks.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
 ├── uv.lock                                        - Locked dependency resolution for `uv`.
 ├── conf/
 │   ├── base/
-│   │   ├── catalog.yml                            - Kedro dataset catalog for raw input, intermediates, and persisted preprocessing outputs.
-│   │   └── parameters.yml                         - Runtime preprocessing parameters such as split ratios and outlier threshold.
+│   │   ├── catalog.yml                            - Kedro dataset catalog for raw input, intermediates, persisted splits, and selected feature artifacts.
+│   │   └── parameters.yml                         - Runtime preprocessing parameters such as split ratios, outlier threshold, and RFECV configuration.
 │   └── local/                                     - Local Kedro environment directory required by the default config loader.
+├── docs/
+│   └── eda_findings.md                            - Written summary of the exploratory analysis and how it motivates preprocessing choices.
 ├── notebooks/
-│   └── EDA.ipynb                                  - Exploratory notebook that reads the locally prepared dataset and inspects distributions and missing values.
+│   ├── EDA.ipynb                                  - Exploratory notebook that reads the locally prepared dataset and inspects distributions, missingness, and class balance.
+│   └── images/
+│       └── distribution_numerical_features.png    - Exported figure of the numerical feature distributions used by the EDA report.
 ├── src/
 │   ├── __init__.py                                - Package marker for shared source code.
 │   ├── project_paths.py                           - Repo-root and data-path helpers used by notebooks and scripts.
@@ -31,7 +35,7 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 │           ├── __init__.py                        - Pipeline namespace package.
 │           └── preprocessing/
 │               ├── __init__.py                    - Re-exports the preprocessing pipeline factory.
-│               ├── nodes.py                       - Split, outlier-removal, mean-imputation, and scaling node implementations.
+│               ├── nodes.py                       - Split, feature-engineering, outlier-removal, imputation, scaling, and RFECV selection node implementations.
 │               └── pipeline.py                    - Kedro node graph for the preprocessing workflow.
 └── tests/
     ├── __init__.py                                - Test package marker.
@@ -40,7 +44,7 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
         ├── __init__.py                            - Pipeline test package marker.
         └── preprocessing/
             ├── __init__.py                        - Preprocessing test package marker.
-            ├── test_nodes.py                      - Unit tests for split, outlier detection, and scaling behavior.
+            ├── test_nodes.py                      - Unit tests for split, feature engineering, outlier detection, imputation, scaling, and RFECV behavior.
             └── test_pipeline.py                   - Unit tests for pipeline assembly and registration.
 ```
 
@@ -62,11 +66,18 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 
 - Input dataset: `data/raw/water_potability.csv`
 - Target column: `Potability`
-- Default split: stratified `70/15/15` for train/validation/test
+- EDA reference: `notebooks/EDA.ipynb`, with findings summarized in `docs/eda_findings.md`
+- Default split: stratified `70/15/15` for train/validation/test with `random_state=73`
+- Feature engineering order: split first, then derive the requested ratios, interactions, stress indicators, risk scores, and binary flags on each split
 - Optional validation: set `preprocessing.validation_size` to `0` to emit an empty validation split
-- Outlier detection: absolute feature Z-score threshold `> 3` on the training split only with `nan_policy="omit"`
+- Outlier detection: absolute feature Z-score threshold `> 3` on the engineered training split only with `nan_policy="omit"`
 - Imputation: `SimpleImputer(strategy="mean")` fit on the cleaned training split, then applied to validation and test features
 - Scaling: `StandardScaler` fit on the imputed training split, then applied to validation and test features
+- Feature selection: `RFECV` with `LogisticRegression(max_iter=5000, random_state=73)`, `StratifiedKFold(n_splits=10, shuffle=True, random_state=73)`, `scoring="roc_auc"`, and `n_jobs=-1`
+- Persisted outputs:
+  - `X_train.pkl`, `X_validation.pkl`, `X_test.pkl`: post-RFE selected feature matrices
+  - `y_train.pkl`, `y_validation.pkl`, `y_test.pkl`: split labels
+  - `selected_features.pkl`: ordered training-derived selected feature list
 
 ## Running The Pipeline
 

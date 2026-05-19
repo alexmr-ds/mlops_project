@@ -10,6 +10,12 @@ X_test_split:
   type: kedro.io.MemoryDataset
 y_train_split:
   type: kedro.io.MemoryDataset
+X_train_engineered:
+  type: kedro.io.MemoryDataset
+X_validation_engineered:
+  type: kedro.io.MemoryDataset
+X_test_engineered:
+  type: kedro.io.MemoryDataset
 X_train_filtered:
   type: kedro.io.MemoryDataset
 X_train_imputed:
@@ -17,6 +23,12 @@ X_train_imputed:
 X_validation_imputed:
   type: kedro.io.MemoryDataset
 X_test_imputed:
+  type: kedro.io.MemoryDataset
+X_train_scaled:
+  type: kedro.io.MemoryDataset
+X_validation_scaled:
+  type: kedro.io.MemoryDataset
+X_test_scaled:
   type: kedro.io.MemoryDataset
 
 X_train:
@@ -37,3 +49,6 @@ y_validation:
 y_test:
   type: mlops_project.datasets.PickleDataset
   filepath: data/03_primary/y_test.pkl
+selected_features:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/selected_features.pkl

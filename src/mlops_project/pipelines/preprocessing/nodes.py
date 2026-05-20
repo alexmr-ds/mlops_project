@@ -152,7 +152,7 @@ def scale_features(
 
 def select_features_rfe(
     X_train: pd.DataFrame, y_train: pd.Series, parameters: dict[str, Any]
-) -> tuple[pd.DataFrame, list[str]]:
+) -> tuple[pd.DataFrame, list[str], pd.DataFrame]:
     """Fit RFECV on scaled training data and return the selected training matrix."""
     rfe_parameters = parameters.get("rfe", {})
     enabled = bool(rfe_parameters.get("enabled", True))
@@ -165,7 +165,12 @@ def select_features_rfe(
 
     if not enabled:
         selected_features = X_train.columns.tolist()
-        return X_train.copy(), selected_features
+        rfe_summary = _build_rfe_summary(
+            feature_names=X_train.columns,
+            selected_mask=np.ones(len(X_train.columns), dtype=bool),
+            rankings=np.ones(len(X_train.columns), dtype=int),
+        )
+        return X_train.copy(), selected_features, rfe_summary
 
     estimator = LogisticRegression(max_iter=logistic_max_iter, random_state=random_state)
     selector = RFECV(
@@ -179,7 +184,12 @@ def select_features_rfe(
 
     selected_features = X_train.columns[selector.support_].tolist()
     selected_train = X_train.loc[:, selected_features].copy()
-    return selected_train, selected_features
+    rfe_summary = _build_rfe_summary(
+        feature_names=X_train.columns,
+        selected_mask=selector.support_,
+        rankings=selector.ranking_,
+    )
+    return selected_train, selected_features, rfe_summary
 
 
 def apply_selected_features(
@@ -279,3 +289,20 @@ def _select_split_columns(split: pd.DataFrame, selected_features: list[str]) -> 
         return pd.DataFrame(columns=selected_features, index=split.index)
 
     return split.loc[:, selected_features].copy()
+
+
+def _build_rfe_summary(
+    feature_names: pd.Index, selected_mask: np.ndarray, rankings: np.ndarray
+) -> pd.DataFrame:
+    """Return a stable per-feature summary of the RFECV decision."""
+    rfe_summary = pd.DataFrame(
+        {
+            "feature": feature_names.tolist(),
+            "selected": selected_mask.astype(bool),
+            "rank": rankings.astype(int),
+            "feature_order": np.arange(1, len(feature_names) + 1, dtype=int),
+        }
+    )
+    return rfe_summary.sort_values(["rank", "feature_order"], kind="stable").reset_index(
+        drop=True
+    )

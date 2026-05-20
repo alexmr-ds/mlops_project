@@ -12,11 +12,17 @@ class PipelineTests(unittest.TestCase):
     def test_create_pipeline_exposes_expected_nodes(self) -> None:
         pipeline = create_pipeline()
         node_names = [pipeline_node.name for pipeline_node in pipeline.nodes]
+        select_features_node = next(
+            pipeline_node
+            for pipeline_node in pipeline.nodes
+            if pipeline_node.name == 'select_features_rfe_node'
+        )
 
-        self.assertEqual(len(node_names), 7)
+        self.assertEqual(len(node_names), 8)
         self.assertListEqual(
             node_names,
             [
+                'validate_raw_data_node',
                 'split_dataset_node',
                 'engineer_features_node',
                 'remove_training_outliers_node',
@@ -25,6 +31,10 @@ class PipelineTests(unittest.TestCase):
                 'select_features_rfe_node',
                 'apply_selected_features_node',
             ],
+        )
+        self.assertListEqual(
+            list(select_features_node.outputs),
+            ['X_train', 'selected_features', 'rfe_summary'],
         )
 
     def test_register_pipelines_sets_default_pipeline(self) -> None:

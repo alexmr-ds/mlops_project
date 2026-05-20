@@ -1,19 +1,20 @@
 # MLOps Project
 
-Current scope: Kedro-based preprocessing for the water potability dataset, including local Kaggle data download, stratified splitting, split-wise feature engineering, training-only outlier removal, mean imputation, standard scaling, and RFECV-based feature selection, with exploratory analysis still available under `notebooks/`.
+Current scope: Kedro-based preprocessing for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified splitting, split-wise feature engineering, training-only outlier removal, mean imputation, standard scaling, RFECV-based feature selection, and a persisted per-feature RFE reporting summary, with exploratory analysis still available under `notebooks/`.
 
 ## Repository Tree
 
 ```text
 .
 ├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, and local data.
+├── CONTEXT.md                                     - Project language for the water potability data contract and preprocessing context.
 ├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
 ├── main.py                                        - CLI entrypoint for local data bootstrap tasks.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
 ├── uv.lock                                        - Locked dependency resolution for `uv`.
 ├── conf/
 │   ├── base/
-│   │   ├── catalog.yml                            - Kedro dataset catalog for raw input, intermediates, persisted splits, and selected feature artifacts.
+│   │   ├── catalog.yml                            - Kedro dataset catalog for raw input, validated intermediates, persisted splits, selected feature artifacts, and RFE reporting outputs.
 │   │   └── parameters.yml                         - Runtime preprocessing parameters such as split ratios, outlier threshold, and RFECV configuration.
 │   └── local/                                     - Local Kedro environment directory required by the default config loader.
 ├── docs/
@@ -36,7 +37,8 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 │           └── preprocessing/
 │               ├── __init__.py                    - Re-exports the preprocessing pipeline factory.
 │               ├── nodes.py                       - Split, feature-engineering, outlier-removal, imputation, scaling, and RFECV selection node implementations.
-│               └── pipeline.py                    - Kedro node graph for the preprocessing workflow.
+│               ├── pipeline.py                    - Kedro node graph for the preprocessing workflow.
+│               └── validation.py                  - Great Expectations raw data contract for the input water potability dataset.
 └── tests/
     ├── __init__.py                                - Test package marker.
     ├── test_data_setup.py                         - Unit tests for interactive credential bootstrap, dataset download, and CLI behavior.
@@ -45,7 +47,8 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
         └── preprocessing/
             ├── __init__.py                        - Preprocessing test package marker.
             ├── test_nodes.py                      - Unit tests for split, feature engineering, outlier detection, imputation, scaling, and RFECV behavior.
-            └── test_pipeline.py                   - Unit tests for pipeline assembly and registration.
+            ├── test_pipeline.py                   - Unit tests for pipeline assembly and registration.
+            └── test_validation.py                 - Unit tests for the fail-fast raw data contract.
 ```
 
 ## Local Data Setup
@@ -60,16 +63,20 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
    - set file permissions to `600`
 4. The script then downloads `adityakadiwal/water-potability` into local `data/raw/`.
 
-`data/` is intentionally local-only and ignored by Git. That includes the downloaded raw CSV and generated Kedro outputs under `data/03_primary/`.
+`data/` is intentionally local-only and ignored by Git. That includes the downloaded raw CSV, generated pipeline outputs under `data/03_primary/`, and reporting artifacts under `data/08_reporting/`.
 
 ## Preprocessing Behavior
 
 - Input dataset: `data/raw/water_potability.csv`
 - Target column: `Potability`
 - EDA reference: `notebooks/EDA.ipynb`, with findings summarized in `docs/eda_findings.md`
+- Raw data validation: Great Expectations validates the loaded dataset before splitting and raises `ValueError` on contract failure
+  - Exact expected columns: `ph`, `Hardness`, `Solids`, `Chloramines`, `Sulfate`, `Conductivity`, `Organic_carbon`, `Trihalomethanes`, `Turbidity`, and `Potability`
+  - Missing values are allowed only for `ph` up to `16%`, `Sulfate` up to `25%`, and `Trihalomethanes` up to `6%`
+  - pH must be within `[0, 14]`; concentration-like measurements must be non-negative; `Potability` must be `0` or `1`
 - Default split: stratified `70/15/15` for train/validation/test with `random_state=73`
 - Feature engineering order: split first, then derive the requested ratios, interactions, stress indicators, risk scores, and binary flags on each split
-- Optional validation: set `preprocessing.validation_size` to `0` to emit an empty validation split
+- Optional validation split: set `preprocessing.validation_size` to `0` to emit an empty validation split
 - Outlier detection: absolute feature Z-score threshold `> 3` on the engineered training split only with `nan_policy="omit"`
 - Imputation: `SimpleImputer(strategy="mean")` fit on the cleaned training split, then applied to validation and test features
 - Scaling: `StandardScaler` fit on the imputed training split, then applied to validation and test features
@@ -77,14 +84,15 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 - Persisted outputs:
   - `X_train.pkl`, `X_validation.pkl`, `X_test.pkl`: post-RFE selected feature matrices
   - `y_train.pkl`, `y_validation.pkl`, `y_test.pkl`: split labels
-  - `selected_features.pkl`: ordered training-derived selected feature list
+  - `selected_features.pkl`: ordered training-derived selected feature list consumed by downstream holdout projection
+  - `rfe_summary.csv`: per-feature RFE reporting summary with selection flag, ranking, and original feature order
 
 ## Running The Pipeline
 
 1. Install dependencies with `uv sync`.
 2. Run `uv run python main.py setup-data` to prepare `data/raw/water_potability.csv`.
 3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`.
-4. Inspect persisted local outputs under `data/03_primary/`.
+4. Inspect persisted local outputs under `data/03_primary/` and `data/08_reporting/`.
 
 ## Data Convention
 

@@ -258,13 +258,49 @@ class FeatureSelectionTests(unittest.TestCase):
             }
         }
 
-        selected_train, selected_features = nodes.select_features_rfe(
+        selected_train, selected_features, rfe_summary = nodes.select_features_rfe(
             X_train, y_train, parameters
         )
 
         self.assertGreaterEqual(len(selected_features), 1)
         self.assertListEqual(selected_train.columns.tolist(), selected_features)
         self.assertTrue(set(selected_features).issubset(X_train.columns))
+        self.assertListEqual(
+            rfe_summary.columns.tolist(),
+            ['feature', 'selected', 'rank', 'feature_order'],
+        )
+        self.assertEqual(len(rfe_summary), X_train.shape[1])
+        self.assertSetEqual(set(rfe_summary['feature']), set(X_train.columns))
+        self.assertListEqual(
+            rfe_summary.sort_values('feature_order')['feature'].tolist(),
+            X_train.columns.tolist(),
+        )
+        self.assertListEqual(
+            rfe_summary.loc[rfe_summary['selected'], 'feature'].tolist(),
+            selected_features,
+        )
+        self.assertTrue((rfe_summary.loc[rfe_summary['selected'], 'rank'] == 1).all())
+
+    def test_select_features_rfe_returns_complete_summary_when_disabled(self) -> None:
+        X_train = pd.DataFrame(
+            {
+                'signal': [0.0, 1.0, 0.0, 1.0],
+                'weak_signal': [0.2, 0.9, 0.1, 0.8],
+                'noise': [-1.0, -0.5, 0.5, 1.0],
+            }
+        )
+        y_train = pd.Series([0, 1, 0, 1])
+
+        selected_train, selected_features, rfe_summary = nodes.select_features_rfe(
+            X_train, y_train, {'rfe': {'enabled': False}}
+        )
+
+        self.assertListEqual(selected_train.columns.tolist(), X_train.columns.tolist())
+        self.assertListEqual(selected_features, X_train.columns.tolist())
+        self.assertTrue(rfe_summary['selected'].all())
+        self.assertTrue((rfe_summary['rank'] == 1).all())
+        self.assertListEqual(rfe_summary['feature'].tolist(), X_train.columns.tolist())
+        self.assertListEqual(rfe_summary['feature_order'].tolist(), [1, 2, 3])
 
     def test_apply_selected_features_projects_validation_and_test(self) -> None:
         X_validation = pd.DataFrame({'a': [1.0], 'b': [2.0], 'c': [3.0]}, index=[20])

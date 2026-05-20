@@ -2,7 +2,7 @@
 
 from kedro.pipeline import Pipeline, node, pipeline
 
-from . import nodes
+from . import nodes, validation
 
 
 def create_pipeline(**kwargs: object) -> Pipeline:
@@ -11,8 +11,14 @@ def create_pipeline(**kwargs: object) -> Pipeline:
     return pipeline(
         [
             node(
+                func=validation.validate_raw_data,
+                inputs="water_potability",
+                outputs="validated_water_potability",
+                name="validate_raw_data_node",
+            ),
+            node(
                 func=nodes.split_dataset,
-                inputs=["water_potability", "params:preprocessing"],
+                inputs=["validated_water_potability", "params:preprocessing"],
                 outputs=[
                     "X_train_split",
                     "X_validation_split",
@@ -54,7 +60,7 @@ def create_pipeline(**kwargs: object) -> Pipeline:
             node(
                 func=nodes.select_features_rfe,
                 inputs=["X_train_scaled", "y_train", "params:preprocessing"],
-                outputs=["X_train", "selected_features"],
+                outputs=["X_train", "selected_features", "rfe_summary"],
                 name="select_features_rfe_node",
             ),
             node(

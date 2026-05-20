@@ -2,6 +2,8 @@ water_potability:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/raw/water_potability.csv
 
+validated_water_potability:
+  type: kedro.io.MemoryDataset
 X_train_split:
   type: kedro.io.MemoryDataset
 X_validation_split:
@@ -52,3 +54,7 @@ y_test:
 selected_features:
   type: mlops_project.datasets.PickleDataset
   filepath: data/03_primary/selected_features.pkl
+
+rfe_summary:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/rfe_summary.csv

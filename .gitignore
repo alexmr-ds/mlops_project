@@ -9,3 +9,6 @@ __pycache__/
 
 # Local data is downloaded and generated outside Git.
 data/
+
+# Kedro Viz local state
+.viz/

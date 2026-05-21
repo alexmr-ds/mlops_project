@@ -32,6 +32,20 @@ X_validation_scaled:
   type: kedro.io.MemoryDataset
 X_test_scaled:
   type: kedro.io.MemoryDataset
+X_train_candidate:
+  type: kedro.io.MemoryDataset
+X_validation_candidate:
+  type: kedro.io.MemoryDataset
+X_test_candidate:
+  type: kedro.io.MemoryDataset
+selected_features_candidate:
+  type: kedro.io.MemoryDataset
+y_train_candidate:
+  type: kedro.io.MemoryDataset
+y_validation_candidate:
+  type: kedro.io.MemoryDataset
+y_test_candidate:
+  type: kedro.io.MemoryDataset
 
 X_train:
   type: mlops_project.datasets.PickleDataset

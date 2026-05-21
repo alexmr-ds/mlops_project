@@ -24,8 +24,8 @@ def create_pipeline(**kwargs: object) -> Pipeline:
                     "X_validation_split",
                     "X_test_split",
                     "y_train_split",
-                    "y_validation",
-                    "y_test",
+                    "y_validation_candidate",
+                    "y_test_candidate",
                 ],
                 name="split_dataset_node",
             ),
@@ -42,7 +42,7 @@ def create_pipeline(**kwargs: object) -> Pipeline:
             node(
                 func=nodes.remove_outliers,
                 inputs=["X_train_engineered", "y_train_split", "params:preprocessing"],
-                outputs=["X_train_filtered", "y_train"],
+                outputs=["X_train_filtered", "y_train_candidate"],
                 name="remove_training_outliers_node",
             ),
             node(
@@ -59,15 +59,45 @@ def create_pipeline(**kwargs: object) -> Pipeline:
             ),
             node(
                 func=nodes.select_features_rfe,
-                inputs=["X_train_scaled", "y_train", "params:preprocessing"],
-                outputs=["X_train", "selected_features", "rfe_summary"],
+                inputs=["X_train_scaled", "y_train_candidate", "params:preprocessing"],
+                outputs=[
+                    "X_train_candidate",
+                    "selected_features_candidate",
+                    "rfe_summary",
+                ],
                 name="select_features_rfe_node",
             ),
             node(
                 func=nodes.apply_selected_features,
-                inputs=["X_validation_scaled", "X_test_scaled", "selected_features"],
-                outputs=["X_validation", "X_test"],
+                inputs=[
+                    "X_validation_scaled",
+                    "X_test_scaled",
+                    "selected_features_candidate",
+                ],
+                outputs=["X_validation_candidate", "X_test_candidate"],
                 name="apply_selected_features_node",
+            ),
+            node(
+                func=validation.validate_preprocessed_data,
+                inputs=[
+                    "X_train_candidate",
+                    "X_validation_candidate",
+                    "X_test_candidate",
+                    "y_train_candidate",
+                    "y_validation_candidate",
+                    "y_test_candidate",
+                    "selected_features_candidate",
+                ],
+                outputs=[
+                    "X_train",
+                    "X_validation",
+                    "X_test",
+                    "y_train",
+                    "y_validation",
+                    "y_test",
+                    "selected_features",
+                ],
+                name="validate_preprocessed_data_node",
             ),
         ]
     )

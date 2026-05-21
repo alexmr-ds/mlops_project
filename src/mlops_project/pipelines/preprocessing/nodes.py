@@ -286,7 +286,7 @@ def _transform_split(transformer: Any, split: pd.DataFrame) -> pd.DataFrame:
 def _select_split_columns(split: pd.DataFrame, selected_features: list[str]) -> pd.DataFrame:
     """Return one split restricted to the ordered selected feature list."""
     if split.empty:
-        return pd.DataFrame(columns=selected_features, index=split.index)
+        return pd.DataFrame(columns=selected_features, index=split.index, dtype=float)
 
     return split.loc[:, selected_features].copy()
 

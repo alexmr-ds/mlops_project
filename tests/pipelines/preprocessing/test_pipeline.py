@@ -17,8 +17,18 @@ class PipelineTests(unittest.TestCase):
             for pipeline_node in pipeline.nodes
             if pipeline_node.name == 'select_features_rfe_node'
         )
+        apply_selected_features_node = next(
+            pipeline_node
+            for pipeline_node in pipeline.nodes
+            if pipeline_node.name == 'apply_selected_features_node'
+        )
+        validate_preprocessed_data_node = next(
+            pipeline_node
+            for pipeline_node in pipeline.nodes
+            if pipeline_node.name == 'validate_preprocessed_data_node'
+        )
 
-        self.assertEqual(len(node_names), 8)
+        self.assertEqual(len(node_names), 9)
         self.assertListEqual(
             node_names,
             [
@@ -30,11 +40,32 @@ class PipelineTests(unittest.TestCase):
                 'scale_features_node',
                 'select_features_rfe_node',
                 'apply_selected_features_node',
+                'validate_preprocessed_data_node',
             ],
         )
         self.assertListEqual(
             list(select_features_node.outputs),
-            ['X_train', 'selected_features', 'rfe_summary'],
+            ['X_train_candidate', 'selected_features_candidate', 'rfe_summary'],
+        )
+        self.assertListEqual(
+            list(apply_selected_features_node.inputs),
+            ['X_validation_scaled', 'X_test_scaled', 'selected_features_candidate'],
+        )
+        self.assertListEqual(
+            list(apply_selected_features_node.outputs),
+            ['X_validation_candidate', 'X_test_candidate'],
+        )
+        self.assertListEqual(
+            list(validate_preprocessed_data_node.outputs),
+            [
+                'X_train',
+                'X_validation',
+                'X_test',
+                'y_train',
+                'y_validation',
+                'y_test',
+                'selected_features',
+            ],
         )
 
     def test_register_pipelines_sets_default_pipeline(self) -> None:
@@ -42,7 +73,10 @@ class PipelineTests(unittest.TestCase):
 
         self.assertIn('preprocessing', pipelines)
         self.assertIn('__default__', pipelines)
-        self.assertEqual(pipelines['preprocessing'].describe(), pipelines['__default__'].describe())
+        self.assertEqual(
+            pipelines['preprocessing'].describe(),
+            pipelines['__default__'].describe(),
+        )
 
 
 if __name__ == '__main__':

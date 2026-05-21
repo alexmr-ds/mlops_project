@@ -326,6 +326,7 @@ class FeatureSelectionTests(unittest.TestCase):
 
         self.assertTrue(selected_validation.empty)
         self.assertListEqual(selected_validation.columns.tolist(), ['b'])
+        self.assertEqual(str(selected_validation.dtypes['b']), 'float64')
 
 
 if __name__ == '__main__':

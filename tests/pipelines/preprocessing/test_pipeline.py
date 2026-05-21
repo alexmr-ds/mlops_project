@@ -72,10 +72,15 @@ class PipelineTests(unittest.TestCase):
         pipelines = register_pipelines()
 
         self.assertIn('preprocessing', pipelines)
+        self.assertIn('modeling', pipelines)
         self.assertIn('__default__', pipelines)
-        self.assertEqual(
-            pipelines['preprocessing'].describe(),
-            pipelines['__default__'].describe(),
+        self.assertGreater(
+            len(pipelines['__default__'].nodes),
+            len(pipelines['preprocessing'].nodes),
+        )
+        self.assertGreater(
+            len(pipelines['__default__'].nodes),
+            len(pipelines['modeling'].nodes),
         )
 
 

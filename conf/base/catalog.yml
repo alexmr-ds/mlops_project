@@ -72,3 +72,40 @@ selected_features:
 rfe_summary:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/08_reporting/rfe_summary.csv
+
+logistic_regression_model:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/logistic_regression_model.pkl
+
+validation_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/validation_metrics.csv
+test_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/test_metrics.csv
+
+validation_confusion_matrix:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/validation_confusion_matrix.csv
+  load_args:
+    index_col: 0
+  save_args:
+    index: true
+test_confusion_matrix:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/test_confusion_matrix.csv
+  load_args:
+    index_col: 0
+  save_args:
+    index: true
+
+validation_confusion_matrix_plot:
+  type: mlops_project.datasets.MatplotlibFigureDataset
+  filepath: data/08_reporting/validation_confusion_matrix.png
+test_confusion_matrix_plot:
+  type: mlops_project.datasets.MatplotlibFigureDataset
+  filepath: data/08_reporting/test_confusion_matrix.png
+
+mlflow_run_info:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/mlflow_run_info.csv

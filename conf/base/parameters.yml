@@ -15,3 +15,13 @@ preprocessing:
     n_jobs: -1
     logistic_max_iter: 5000
     random_state: 73
+
+modeling:
+  logistic_regression:
+    max_iter: 1000
+    solver: lbfgs
+    random_state: 73
+  mlflow:
+    tracking_uri: mlruns
+    experiment_name: water_potability_modeling
+    run_name: logistic_regression_baseline

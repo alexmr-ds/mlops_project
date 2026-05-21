@@ -1,20 +1,20 @@
 # MLOps Project
 
-Current scope: Kedro-based preprocessing for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified splitting, split-wise feature engineering, training-only outlier removal, mean imputation, standard scaling, RFECV-based feature selection, final model-ready Great Expectations validation, and a persisted per-feature RFE reporting summary, with exploratory analysis still available under `notebooks/`.
+Current scope: Kedro-based preprocessing and baseline modeling for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified splitting, split-wise feature engineering, training-only outlier removal, mean imputation, standard scaling, RFECV-based feature selection, final model-ready Great Expectations validation, LogisticRegression baseline training, validation/test evaluation, local MLflow tracking, and persisted reporting artifacts, with exploratory analysis still available under `notebooks/`.
 
 ## Repository Tree
 
 ```text
 .
-├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, and local data.
+├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, local data, and MLflow runs.
 ├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
 ├── main.py                                        - CLI entrypoint for local data bootstrap tasks.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
 ├── uv.lock                                        - Locked dependency resolution for `uv`.
 ├── conf/
 │   ├── base/
-│   │   ├── catalog.yml                            - Kedro dataset catalog for raw input, validation candidates, persisted splits, selected feature artifacts, and RFE reporting outputs.
-│   │   └── parameters.yml                         - Runtime preprocessing parameters such as split ratios, outlier threshold, and RFECV configuration.
+│   │   ├── catalog.yml                            - Kedro dataset catalog for raw input, validation candidates, selected feature artifacts, model artifacts, MLflow run metadata, and reporting outputs.
+│   │   └── parameters.yml                         - Runtime preprocessing, modeling, and MLflow parameters.
 │   └── local/                                     - Local Kedro environment directory required by the default config loader.
 ├── docs/
 │   └── eda_findings.md                            - Written summary of the exploratory analysis and how it motivates preprocessing choices.
@@ -28,11 +28,15 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 │   └── mlops_project/
 │       ├── __init__.py                            - Kedro project package marker.
 │       ├── data_setup.py                          - Interactive Kaggle credential bootstrap and dataset download helper.
-│       ├── datasets.py                            - Local Kedro dataset implementations for CSV and pickle persistence.
-│       ├── pipeline_registry.py                   - Registers the preprocessing pipeline and sets it as the default Kedro pipeline.
+│       ├── datasets.py                            - Local Kedro dataset implementations for CSV, pickle, and matplotlib figure persistence.
+│       ├── pipeline_registry.py                   - Registers preprocessing and modeling pipelines and composes the default Kedro pipeline.
 │       ├── settings.py                            - Project settings entrypoint for Kedro.
 │       └── pipelines/
 │           ├── __init__.py                        - Pipeline namespace package.
+│           ├── modeling/
+│           │   ├── __init__.py                    - Re-exports the modeling pipeline factory.
+│           │   ├── nodes.py                       - LogisticRegression training, evaluation, plotting, and MLflow logging node implementations.
+│           │   └── pipeline.py                    - Kedro node graph for the baseline modeling workflow.
 │           └── preprocessing/
 │               ├── __init__.py                    - Re-exports the preprocessing pipeline factory.
 │               ├── nodes.py                       - Split, feature-engineering, outlier-removal, imputation, scaling, and RFECV selection node implementations.
@@ -43,10 +47,14 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
     ├── test_data_setup.py                         - Unit tests for interactive credential bootstrap, dataset download, and CLI behavior.
     └── pipelines/
         ├── __init__.py                            - Pipeline test package marker.
+        ├── modeling/
+        │   ├── __init__.py                        - Modeling test package marker.
+        │   ├── test_nodes.py                      - Unit tests for LogisticRegression training, evaluation, plotting, and MLflow logging behavior.
+        │   └── test_pipeline.py                   - Unit tests for modeling pipeline assembly.
         └── preprocessing/
             ├── __init__.py                        - Preprocessing test package marker.
             ├── test_nodes.py                      - Unit tests for split, feature engineering, outlier detection, imputation, scaling, and RFECV behavior.
-            ├── test_pipeline.py                   - Unit tests for pipeline assembly and registration.
+            ├── test_pipeline.py                   - Unit tests for preprocessing pipeline assembly and registry composition.
             └── test_validation.py                 - Unit tests for the fail-fast raw data contract and the final preprocessing contract.
 ```
 
@@ -63,6 +71,8 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
 4. The script then downloads `adityakadiwal/water-potability` into local `data/raw/`.
 
 `data/` is intentionally local-only and ignored by Git. That includes the downloaded raw CSV, generated pipeline outputs under `data/03_primary/`, and reporting artifacts under `data/08_reporting/`.
+
+`mlruns/` is also local-only and ignored by Git. It stores MLflow runs for local development.
 
 ## Preprocessing Behavior
 
@@ -88,12 +98,29 @@ Current scope: Kedro-based preprocessing for the water potability dataset, inclu
   - `selected_features.pkl`: ordered training-derived selected feature list consumed by downstream holdout projection
   - `rfe_summary.csv`: per-feature RFE reporting summary with selection flag, ranking, and original feature order
 
+## Modeling Behavior
+
+- Baseline model: `LogisticRegression(max_iter=1000, solver="lbfgs", random_state=73)`
+- Training data: final validated `X_train` and `y_train`
+- Development evaluation: final validated `X_validation` and `y_validation`
+- Final holdout evaluation: final validated `X_test` and `y_test`
+- Primary development metric: `validation_f1`
+- Additional metrics: accuracy, precision, recall, F1, weighted F1, ROC AUC, and confusion matrix for validation and test
+- MLflow tracking: local `mlruns/` with experiment `water_potability_modeling` and run `logistic_regression_baseline`
+- Persisted modeling outputs:
+  - `logistic_regression_model.pkl`: trained baseline model
+  - `validation_metrics.csv`, `test_metrics.csv`: one-row metric tables
+  - `validation_confusion_matrix.csv`, `test_confusion_matrix.csv`: 2x2 confusion matrix tables
+  - `validation_confusion_matrix.png`, `test_confusion_matrix.png`: confusion matrix plots
+  - `mlflow_run_info.csv`: MLflow run identifier and tracking metadata
+
 ## Running The Pipeline
 
 1. Install dependencies with `uv sync`.
 2. Run `uv run python main.py setup-data` to prepare `data/raw/water_potability.csv`.
 3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`.
-4. Inspect persisted local outputs under `data/03_primary/` and `data/08_reporting/`.
+4. Inspect persisted local outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
+5. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns`.
 
 ## Data Convention
 

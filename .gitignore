@@ -6,9 +6,13 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+CONTEXT.md
 
 # Local data is downloaded and generated outside Git.
 data/
+
+# Local MLflow tracking state
+mlruns/
 
 # Kedro Viz local state
 .viz/

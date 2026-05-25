@@ -18,7 +18,8 @@ LOGISTIC_REGRESSION_NODE_NAMES = [
     'log_model_to_mlflow_node',
 ]
 RANDOM_FOREST_NODE_NAMES = [
-    'cross_validate_and_train_random_forest_node',
+    'tune_random_forest_hyperparameters_node',
+    'train_evaluate_random_forest_with_best_params_node',
     'create_random_forest_test_confusion_matrix_plot_node',
     'log_random_forest_to_mlflow_node',
 ]
@@ -61,10 +62,15 @@ class ModelingPipelineTests(unittest.TestCase):
     def test_create_random_forest_pipeline_exposes_expected_nodes(self) -> None:
         pipeline = create_random_forest_pipeline()
         node_names = [pipeline_node.name for pipeline_node in pipeline.nodes]
+        random_forest_tuning_node = next(
+            pipeline_node
+            for pipeline_node in pipeline.nodes
+            if pipeline_node.name == 'tune_random_forest_hyperparameters_node'
+        )
         random_forest_train_node = next(
             pipeline_node
             for pipeline_node in pipeline.nodes
-            if pipeline_node.name == 'cross_validate_and_train_random_forest_node'
+            if pipeline_node.name == 'train_evaluate_random_forest_with_best_params_node'
         )
         random_forest_log_node = next(
             pipeline_node
@@ -74,11 +80,19 @@ class ModelingPipelineTests(unittest.TestCase):
 
         self.assertCountEqual(node_names, RANDOM_FOREST_NODE_NAMES)
         self.assertListEqual(
+            list(random_forest_tuning_node.outputs),
+            [
+                'random_forest_best_params',
+                'random_forest_cv_metrics',
+                'random_forest_cv_fold_metrics',
+                'random_forest_optuna_trials',
+                'random_forest_optuna_fold_metrics',
+            ],
+        )
+        self.assertListEqual(
             list(random_forest_train_node.outputs),
             [
                 'random_forest_model',
-                'random_forest_cv_metrics',
-                'random_forest_cv_fold_metrics',
                 'random_forest_test_metrics',
                 'random_forest_test_confusion_matrix',
                 'random_forest_selected_features',
@@ -88,6 +102,9 @@ class ModelingPipelineTests(unittest.TestCase):
             list(random_forest_log_node.outputs),
             ['random_forest_mlflow_run_info'],
         )
+        self.assertIn('random_forest_best_params', random_forest_log_node.inputs)
+        self.assertIn('random_forest_optuna_trials', random_forest_log_node.inputs)
+        self.assertIn('random_forest_optuna_fold_metrics', random_forest_log_node.inputs)
 
     def test_create_pipeline_exposes_all_modeling_nodes(self) -> None:
         pipeline = create_pipeline()
@@ -143,6 +160,13 @@ class ModelingPipelineTests(unittest.TestCase):
                 reloaded_matrix = dataset.load()
 
             self.assertEqual(reloaded_matrix.shape, (2, 2))
+
+    def test_random_forest_optimization_outputs_are_cataloged(self) -> None:
+        catalog = _catalog_config()
+
+        self.assertIn('random_forest_best_params', catalog)
+        self.assertIn('random_forest_optuna_trials', catalog)
+        self.assertIn('random_forest_optuna_fold_metrics', catalog)
 
 
 def _catalog_config() -> dict[str, object]:

@@ -67,7 +67,24 @@ def create_random_forest_pipeline(**kwargs: object) -> Pipeline:
     return pipeline(
         [
             node(
-                func=nodes.cross_validate_and_train_random_forest,
+                func=nodes.tune_random_forest_hyperparameters,
+                inputs=[
+                    "X_train",
+                    "y_train",
+                    "params:preprocessing",
+                    "params:modeling",
+                ],
+                outputs=[
+                    "random_forest_best_params",
+                    "random_forest_cv_metrics",
+                    "random_forest_cv_fold_metrics",
+                    "random_forest_optuna_trials",
+                    "random_forest_optuna_fold_metrics",
+                ],
+                name="tune_random_forest_hyperparameters_node",
+            ),
+            node(
+                func=nodes.train_evaluate_random_forest_with_best_params,
                 inputs=[
                     "X_train",
                     "X_test",
@@ -75,16 +92,15 @@ def create_random_forest_pipeline(**kwargs: object) -> Pipeline:
                     "y_test",
                     "params:preprocessing",
                     "params:modeling",
+                    "random_forest_best_params",
                 ],
                 outputs=[
                     "random_forest_model",
-                    "random_forest_cv_metrics",
-                    "random_forest_cv_fold_metrics",
                     "random_forest_test_metrics",
                     "random_forest_test_confusion_matrix",
                     "random_forest_selected_features",
                 ],
-                name="cross_validate_and_train_random_forest_node",
+                name="train_evaluate_random_forest_with_best_params_node",
             ),
             node(
                 func=nodes.create_test_confusion_matrix_plot,
@@ -97,8 +113,11 @@ def create_random_forest_pipeline(**kwargs: object) -> Pipeline:
                 inputs=[
                     "random_forest_model",
                     "random_forest_selected_features",
+                    "random_forest_best_params",
                     "random_forest_cv_metrics",
                     "random_forest_cv_fold_metrics",
+                    "random_forest_optuna_trials",
+                    "random_forest_optuna_fold_metrics",
                     "random_forest_test_metrics",
                     "random_forest_test_confusion_matrix",
                     "random_forest_test_confusion_matrix_plot",

@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 
+import mlflow
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
@@ -71,6 +72,66 @@ class ModelingNodeTests(unittest.TestCase):
         self.assertEqual(model.estimator.n_jobs, -1)
         self.assertEqual(cv_metrics.shape, (1, 12))
         self.assertEqual(len(cv_fold_metrics), 3)
+        self.assertEqual(test_metrics.shape, (1, 6))
+        self.assertEqual(matrix.shape, (2, 2))
+        self.assertGreaterEqual(len(selected_features), 1)
+
+    def test_tune_random_forest_hyperparameters_returns_trial_artifacts(self) -> None:
+        X_train, _, y_train, _ = _modeling_artifacts()
+
+        best_params, cv_metrics, cv_fold_metrics, trials, trial_fold_metrics = (
+            nodes.tune_random_forest_hyperparameters(
+                X_train,
+                y_train,
+                _preprocessing_parameters(),
+                _modeling_parameters(),
+            )
+        )
+
+        self.assertEqual(best_params['random_state'], 73)
+        self.assertEqual(best_params['n_jobs'], -1)
+        self.assertIn(best_params['n_estimators'], [5, 10])
+        self.assertEqual(cv_metrics.shape, (1, 12))
+        self.assertIn('cv_mean_f1', cv_metrics.columns)
+        self.assertEqual(len(cv_fold_metrics), 3)
+        self.assertEqual(len(trials), 2)
+        self.assertEqual(int(trials['is_best'].sum()), 1)
+        self.assertIn('param_n_estimators', trials.columns)
+        self.assertEqual(len(trial_fold_metrics), 6)
+        self.assertIn('param_n_estimators', trial_fold_metrics.columns)
+
+    def test_train_evaluate_random_forest_with_best_params_returns_final_outputs(
+        self,
+    ) -> None:
+        X_train, X_test, y_train, y_test = _modeling_artifacts()
+        best_params = {
+            'n_estimators': 5,
+            'max_depth': None,
+            'min_samples_leaf': 1,
+            'min_samples_split': 2,
+            'max_features': None,
+            'bootstrap': True,
+            'class_weight': None,
+            'random_state': 73,
+            'n_jobs': -1,
+        }
+
+        model, test_metrics, matrix, selected_features = (
+            nodes.train_evaluate_random_forest_with_best_params(
+                X_train,
+                X_test,
+                y_train,
+                y_test,
+                _preprocessing_parameters(),
+                _modeling_parameters(),
+                best_params,
+            )
+        )
+
+        self.assertIsInstance(model, model_bundle.ModelBundle)
+        self.assertIsInstance(model.estimator, RandomForestClassifier)
+        self.assertEqual(model.estimator.n_estimators, 5)
+        self.assertEqual(model.estimator.random_state, 73)
         self.assertEqual(test_metrics.shape, (1, 6))
         self.assertEqual(matrix.shape, (2, 2))
         self.assertGreaterEqual(len(selected_features), 1)
@@ -154,6 +215,9 @@ class ModelingNodeTests(unittest.TestCase):
                 figure,
                 parameters,
             )
+            logged_model = mlflow.pyfunc.load_model(
+                f"runs:/{run_info.loc[0, 'run_id']}/logistic_regression_model"
+            )
 
         self.assertEqual(run_info.shape[0], 1)
         self.assertIn('run_id', run_info.columns)
@@ -161,18 +225,28 @@ class ModelingNodeTests(unittest.TestCase):
             run_info.loc[0, 'experiment_name'],
             'water_potability_modeling',
         )
+        self.assertEqual(len(logged_model.predict(X_test)), len(X_test))
 
     def test_log_random_forest_to_mlflow_returns_run_info(self) -> None:
         X_train, X_test, y_train, y_test = _modeling_artifacts()
         parameters = _modeling_parameters()
-        model, cv_metrics, cv_fold_metrics, test_metrics, matrix, selected_features = (
-            nodes.cross_validate_and_train_random_forest(
+        best_params, cv_metrics, cv_fold_metrics, trials, trial_fold_metrics = (
+            nodes.tune_random_forest_hyperparameters(
+                X_train,
+                y_train,
+                _preprocessing_parameters(),
+                parameters,
+            )
+        )
+        model, test_metrics, matrix, selected_features = (
+            nodes.train_evaluate_random_forest_with_best_params(
                 X_train,
                 X_test,
                 y_train,
                 y_test,
                 _preprocessing_parameters(),
                 parameters,
+                best_params,
             )
         )
         figure = nodes.create_test_confusion_matrix_plot(matrix)
@@ -182,12 +256,18 @@ class ModelingNodeTests(unittest.TestCase):
             run_info = nodes.log_random_forest_to_mlflow(
                 model,
                 selected_features,
+                best_params,
                 cv_metrics,
                 cv_fold_metrics,
+                trials,
+                trial_fold_metrics,
                 test_metrics,
                 matrix,
                 figure,
                 parameters,
+            )
+            logged_model = mlflow.pyfunc.load_model(
+                f"runs:/{run_info.loc[0, 'run_id']}/random_forest_model"
             )
 
         self.assertEqual(run_info.shape[0], 1)
@@ -196,6 +276,7 @@ class ModelingNodeTests(unittest.TestCase):
             run_info.loc[0, 'run_name'],
             'random_forest_nonlinear_probe',
         )
+        self.assertEqual(len(logged_model.predict(X_test)), len(X_test))
 
     def test_cross_validate_model_fails_for_empty_training_data(self) -> None:
         X_train, X_test, y_train, y_test = _modeling_artifacts()
@@ -248,6 +329,22 @@ def _modeling_parameters() -> dict[str, object]:
             'random_state': 73,
             'n_jobs': -1,
             'class_weight': None,
+        },
+        'random_forest_optimization': {
+            'enabled': True,
+            'n_trials': 2,
+            'sampler': 'tpe',
+            'random_state': 73,
+            'objective_metric': 'f1',
+            'search_space': {
+                'n_estimators': {'type': 'categorical', 'choices': [5, 10]},
+                'max_depth': {'type': 'categorical', 'choices': [None, 3]},
+                'min_samples_leaf': {'type': 'categorical', 'choices': [1, 2]},
+                'min_samples_split': {'type': 'categorical', 'choices': [2, 4]},
+                'max_features': {'type': 'categorical', 'choices': [None, 'sqrt']},
+                'bootstrap': {'type': 'categorical', 'choices': [True, False]},
+                'class_weight': {'type': 'categorical', 'choices': [None, 'balanced']},
+            },
         },
         'mlflow': {
             'tracking_uri': 'mlruns',

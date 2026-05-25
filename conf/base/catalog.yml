@@ -42,6 +42,9 @@ random_forest_model:
 random_forest_selected_features:
   type: mlops_project.datasets.PickleDataset
   filepath: data/06_models/random_forest_selected_features.pkl
+random_forest_best_params:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/random_forest_best_params.pkl
 
 logistic_regression_cv_metrics:
   type: mlops_project.datasets.PandasCSVDataset
@@ -61,6 +64,12 @@ random_forest_cv_fold_metrics:
 random_forest_test_metrics:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/08_reporting/random_forest_test_metrics.csv
+random_forest_optuna_trials:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/random_forest_optuna_trials.csv
+random_forest_optuna_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/random_forest_optuna_fold_metrics.csv
 
 logistic_regression_test_confusion_matrix:
   type: mlops_project.datasets.PandasCSVDataset

@@ -31,6 +31,38 @@ modeling:
     random_state: 73
     n_jobs: -1
     class_weight: null
+  random_forest_optimization:
+    enabled: true
+    n_trials: 30
+    sampler: tpe
+    random_state: 73
+    objective_metric: f1
+    search_space:
+      n_estimators:
+        type: int
+        low: 100
+        high: 500
+        step: 50
+      max_depth:
+        type: categorical
+        choices: [null, 3, 5, 10, 15, 20, 30]
+      min_samples_leaf:
+        type: int
+        low: 1
+        high: 10
+      min_samples_split:
+        type: int
+        low: 2
+        high: 20
+      max_features:
+        type: categorical
+        choices: [sqrt, log2, null]
+      bootstrap:
+        type: categorical
+        choices: [true, false]
+      class_weight:
+        type: categorical
+        choices: [null, balanced]
   mlflow:
     tracking_uri: mlruns
     experiment_name: water_potability_modeling

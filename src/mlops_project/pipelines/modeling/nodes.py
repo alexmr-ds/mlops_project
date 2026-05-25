@@ -1,163 +1,112 @@
-"""Node functions for LogisticRegression baseline modeling."""
+"""Node functions for cross-validated model training and evaluation."""
 
 from __future__ import annotations
 
 import json
+import pickle
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 import mlflow
-import mlflow.sklearn
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import f1_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import StratifiedKFold
+
+from mlops_project.modeling import model_bundle as modeling_model_bundle
+from mlops_project.modeling import preprocessing as modeling_preprocessing
+
 
 CLASS_LABELS = [0, 1]
-PRIMARY_DEVELOPMENT_METRIC = "validation_f1"
+METRIC_NAMES = ("accuracy", "precision", "recall", "f1", "f1_weighted", "roc_auc")
+PRIMARY_DEVELOPMENT_METRIC = "cv_mean_f1"
+LOGISTIC_REGRESSION_MODEL_ARTIFACT_NAME = "logistic_regression_model"
+RANDOM_FOREST_MODEL_ARTIFACT_NAME = "random_forest_model"
+RANDOM_FOREST_RUN_NAME = "random_forest_nonlinear_probe"
 
 
-def train_logistic_regression_model(
+@dataclass(frozen=True)
+class FittedModelingStack:
+    """Container for a fitted fold-local preprocessing and model stack."""
+
+    model: modeling_model_bundle.ModelBundle
+    selected_features: list[str]
+    evaluation_features: pd.DataFrame
+    filtered_training_row_count: int
+
+
+def cross_validate_and_train_logistic_regression(
     X_train: pd.DataFrame,
-    y_train: pd.Series,
-    selected_features: list[str],
-    parameters: dict[str, Any],
-) -> LogisticRegression:
-    """Train the first LogisticRegression baseline."""
-    _validate_feature_label_artifacts(
-        split_name="train",
-        features=X_train,
-        labels=y_train,
-        selected_features=selected_features,
-    )
-
-    model_parameters = parameters.get("logistic_regression", {})
-    model = LogisticRegression(
-        max_iter=int(model_parameters.get("max_iter", 1000)),
-        solver=str(model_parameters.get("solver", "lbfgs")),
-        random_state=int(model_parameters.get("random_state", 73)),
-    )
-    model.fit(X_train.loc[:, selected_features], y_train)
-    return model
-
-
-def evaluate_validation_model(
-    model: LogisticRegression,
-    X_validation: pd.DataFrame,
-    y_validation: pd.Series,
-    selected_features: list[str],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Evaluate the baseline on the development validation split."""
-    return evaluate_model(
-        model=model,
-        features=X_validation,
-        labels=y_validation,
-        selected_features=selected_features,
-        split_name="validation",
-    )
-
-
-def evaluate_test_model(
-    model: LogisticRegression,
     X_test: pd.DataFrame,
+    y_train: pd.Series,
     y_test: pd.Series,
-    selected_features: list[str],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Evaluate the baseline on the final holdout test split."""
-    return evaluate_model(
-        model=model,
-        features=X_test,
-        labels=y_test,
-        selected_features=selected_features,
-        split_name="test",
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+) -> tuple[Any, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str]]:
+    """Cross-validate, train, and test a logistic regression model."""
+    return _cross_validate_and_train_model(
+        model_name="logistic_regression",
+        X_train=X_train,
+        X_test=X_test,
+        y_train=y_train,
+        y_test=y_test,
+        preprocessing_parameters=preprocessing_parameters,
+        modeling_parameters=modeling_parameters,
     )
 
 
-def evaluate_model(
-    model: LogisticRegression,
-    features: pd.DataFrame,
-    labels: pd.Series,
-    selected_features: list[str],
-    split_name: str,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return metrics and confusion matrix for one model evaluation split."""
-    _validate_model(model)
-    _validate_feature_label_artifacts(
-        split_name=split_name,
-        features=features,
-        labels=labels,
-        selected_features=selected_features,
+def cross_validate_and_train_random_forest(
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+) -> tuple[Any, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str]]:
+    """Cross-validate, train, and test a random forest classifier."""
+    return _cross_validate_and_train_model(
+        model_name="random_forest",
+        X_train=X_train,
+        X_test=X_test,
+        y_train=y_train,
+        y_test=y_test,
+        preprocessing_parameters=preprocessing_parameters,
+        modeling_parameters=modeling_parameters,
     )
-
-    split_features = features.loc[:, selected_features]
-    predicted_labels = model.predict(split_features)
-    predicted_probabilities = model.predict_proba(split_features)[:, 1]
-
-    metrics = pd.DataFrame(
-        [
-            {
-                "accuracy": accuracy_score(labels, predicted_labels),
-                "precision": precision_score(labels, predicted_labels, zero_division=0),
-                "recall": recall_score(labels, predicted_labels, zero_division=0),
-                "f1": f1_score(labels, predicted_labels, zero_division=0),
-                "f1_weighted": f1_score(
-                    labels,
-                    predicted_labels,
-                    average="weighted",
-                    zero_division=0,
-                ),
-                "roc_auc": _score_roc_auc(labels, predicted_probabilities, split_name),
-            }
-        ]
-    )
-    matrix = pd.DataFrame(
-        confusion_matrix(labels, predicted_labels, labels=CLASS_LABELS),
-        index=["actual_0", "actual_1"],
-        columns=["predicted_0", "predicted_1"],
-    )
-    matrix.index.name = "actual"
-    return metrics, matrix
-
-
-def create_validation_confusion_matrix_plot(confusion_matrix_frame: pd.DataFrame) -> Figure:
-    """Create the validation confusion matrix figure."""
-    return create_confusion_matrix_plot(confusion_matrix_frame, split_name="validation")
 
 
 def create_test_confusion_matrix_plot(confusion_matrix_frame: pd.DataFrame) -> Figure:
-    """Create the test confusion matrix figure."""
-    return create_confusion_matrix_plot(confusion_matrix_frame, split_name="test")
+    """Create a matplotlib plot for the final test confusion matrix."""
+    _validate_confusion_matrix_frame(confusion_matrix_frame)
 
+    figure, axis = plt.subplots(figsize=(4, 4))
+    image = axis.imshow(confusion_matrix_frame.values, cmap="Blues")
 
-def create_confusion_matrix_plot(
-    confusion_matrix_frame: pd.DataFrame, split_name: str
-) -> Figure:
-    """Create a compact matplotlib heatmap for a confusion matrix."""
-    _validate_confusion_matrix(confusion_matrix_frame, split_name)
+    axis.set_title("Test Confusion Matrix")
+    axis.set_xlabel("Predicted Label")
+    axis.set_ylabel("Actual Label")
+    axis.set_xticks(range(len(CLASS_LABELS)), labels=CLASS_LABELS)
+    axis.set_yticks(range(len(CLASS_LABELS)), labels=CLASS_LABELS)
 
-    matrix_values = confusion_matrix_frame[["predicted_0", "predicted_1"]].to_numpy()
-    figure, axis = plt.subplots(figsize=(4, 3))
-    image = axis.imshow(matrix_values, cmap="Blues")
-    axis.set_title(f"{split_name.title()} confusion matrix")
-    axis.set_xlabel("Predicted label")
-    axis.set_ylabel("Actual label")
-    axis.set_xticks([0, 1], labels=["0", "1"])
-    axis.set_yticks([0, 1], labels=["0", "1"])
-
-    for row_index in range(matrix_values.shape[0]):
-        for column_index in range(matrix_values.shape[1]):
+    for row_index, row_label in enumerate(confusion_matrix_frame.index):
+        for column_index, column_label in enumerate(confusion_matrix_frame.columns):
             axis.text(
                 column_index,
                 row_index,
-                str(matrix_values[row_index, column_index]),
+                str(confusion_matrix_frame.loc[row_label, column_label]),
                 ha="center",
                 va="center",
                 color="black",
@@ -168,189 +117,535 @@ def create_confusion_matrix_plot(
     return figure
 
 
+def create_confusion_matrix_plot(confusion_matrix_frame: pd.DataFrame) -> Figure:
+    """Create a matplotlib plot for a confusion matrix."""
+    return create_test_confusion_matrix_plot(confusion_matrix_frame)
+
+
 def log_model_to_mlflow(
-    model: LogisticRegression,
+    model: Any,
     selected_features: list[str],
-    validation_metrics: pd.DataFrame,
+    cv_metrics: pd.DataFrame,
+    cv_fold_metrics: pd.DataFrame,
     test_metrics: pd.DataFrame,
-    validation_confusion_matrix: pd.DataFrame,
     test_confusion_matrix: pd.DataFrame,
-    validation_confusion_matrix_plot: Figure,
     test_confusion_matrix_plot: Figure,
     parameters: dict[str, Any],
 ) -> pd.DataFrame:
-    """Log the baseline model and evaluation artifacts to one MLflow run."""
-    _validate_model(model)
-    _validate_selected_features(selected_features)
-    _validate_metrics_frame(validation_metrics, "validation")
-    _validate_metrics_frame(test_metrics, "test")
-    _validate_confusion_matrix(validation_confusion_matrix, "validation")
-    _validate_confusion_matrix(test_confusion_matrix, "test")
-
-    mlflow_parameters = parameters.get("mlflow", {})
-    tracking_uri = str(mlflow_parameters.get("tracking_uri", "mlruns"))
-    experiment_name = str(
-        mlflow_parameters.get("experiment_name", "water_potability_modeling")
+    """Log logistic regression CV and final test outputs to MLflow."""
+    return _log_cv_model_to_mlflow(
+        model=model,
+        selected_features=selected_features,
+        cv_metrics=cv_metrics,
+        cv_fold_metrics=cv_fold_metrics,
+        test_metrics=test_metrics,
+        test_confusion_matrix=test_confusion_matrix,
+        test_confusion_matrix_plot=test_confusion_matrix_plot,
+        parameters=parameters,
+        model_name="logistic_regression",
+        run_name=parameters["mlflow"]["run_name"],
+        artifact_model_name=LOGISTIC_REGRESSION_MODEL_ARTIFACT_NAME,
     )
-    run_name = str(mlflow_parameters.get("run_name", "logistic_regression_baseline"))
 
-    mlflow.set_tracking_uri(tracking_uri)
-    mlflow.set_experiment(experiment_name)
 
-    with mlflow.start_run(run_name=run_name) as run:
-        mlflow.log_param("model_type", type(model).__name__)
-        mlflow.log_param("primary_development_metric", PRIMARY_DEVELOPMENT_METRIC)
-        mlflow.log_param("selected_feature_count", len(selected_features))
+def log_random_forest_to_mlflow(
+    model: Any,
+    selected_features: list[str],
+    cv_metrics: pd.DataFrame,
+    cv_fold_metrics: pd.DataFrame,
+    test_metrics: pd.DataFrame,
+    test_confusion_matrix: pd.DataFrame,
+    test_confusion_matrix_plot: Figure,
+    parameters: dict[str, Any],
+) -> pd.DataFrame:
+    """Log random forest CV and final test outputs to MLflow."""
+    return _log_cv_model_to_mlflow(
+        model=model,
+        selected_features=selected_features,
+        cv_metrics=cv_metrics,
+        cv_fold_metrics=cv_fold_metrics,
+        test_metrics=test_metrics,
+        test_confusion_matrix=test_confusion_matrix,
+        test_confusion_matrix_plot=test_confusion_matrix_plot,
+        parameters=parameters,
+        model_name="random_forest",
+        run_name=RANDOM_FOREST_RUN_NAME,
+        artifact_model_name=RANDOM_FOREST_MODEL_ARTIFACT_NAME,
+    )
+
+
+def _cross_validate_and_train_model(
+    *,
+    model_name: str,
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+) -> tuple[Any, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str]]:
+    _validate_feature_label_artifacts(X_train, X_test, y_train, y_test)
+    cross_validation_config = modeling_parameters.get("cross_validation", {})
+    splitter = _build_cross_validation_splitter(y_train, cross_validation_config)
+
+    fold_rows: list[dict[str, Any]] = []
+    for fold_number, (train_positions, validation_positions) in enumerate(
+        splitter.split(X_train, y_train),
+        start=1,
+    ):
+        fold_X_train = X_train.iloc[train_positions]
+        fold_y_train = y_train.iloc[train_positions]
+        fold_X_validation = X_train.iloc[validation_positions]
+        fold_y_validation = y_train.iloc[validation_positions]
+
+        fitted_stack = _fit_modeling_stack(
+            model_name=model_name,
+            X_train=fold_X_train,
+            y_train=fold_y_train,
+            X_evaluation=fold_X_validation,
+            preprocessing_parameters=preprocessing_parameters,
+            modeling_parameters=modeling_parameters,
+        )
+        fold_metrics = _calculate_metrics(
+            y_true=fold_y_validation,
+            predictions=fitted_stack.model.predict(fitted_stack.evaluation_features),
+            probabilities=_predict_positive_class_probability(
+                fitted_stack.model,
+                fitted_stack.evaluation_features,
+            ),
+        )
+        fold_rows.append(
+            {
+                "fold": fold_number,
+                "train_row_count": len(fold_X_train),
+                "filtered_train_row_count": fitted_stack.filtered_training_row_count,
+                "validation_row_count": len(fold_X_validation),
+                "selected_feature_count": len(fitted_stack.selected_features),
+                **fold_metrics,
+            }
+        )
+
+    cv_fold_metrics = pd.DataFrame(fold_rows)
+    cv_metrics = _summarize_cv_metrics(cv_fold_metrics)
+
+    final_stack = _fit_modeling_stack(
+        model_name=model_name,
+        X_train=X_train,
+        y_train=y_train,
+        X_evaluation=X_test,
+        preprocessing_parameters=preprocessing_parameters,
+        modeling_parameters=modeling_parameters,
+    )
+    test_metrics, test_confusion_matrix = evaluate_model(
+        model=final_stack.model,
+        X_test=final_stack.evaluation_features,
+        y_test=y_test,
+        selected_features=final_stack.selected_features,
+    )
+
+    return (
+        final_stack.model,
+        cv_metrics,
+        cv_fold_metrics,
+        test_metrics,
+        test_confusion_matrix,
+        final_stack.selected_features,
+    )
+
+
+def evaluate_model(
+    model: Any,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    selected_features: list[str] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Evaluate a fitted model on the final holdout test split."""
+    _validate_test_artifacts(model, X_test, y_test, selected_features)
+
+    evaluation_features = X_test
+    if selected_features is not None and not isinstance(
+        model, modeling_model_bundle.ModelBundle
+    ):
+        evaluation_features = X_test.loc[:, selected_features]
+
+    predictions = model.predict(evaluation_features)
+    probabilities = _predict_positive_class_probability(model, evaluation_features)
+    metrics_frame = pd.DataFrame([_calculate_metrics(y_test, predictions, probabilities)])
+    confusion_matrix_frame = _build_confusion_matrix_frame(y_test, predictions)
+    return metrics_frame, confusion_matrix_frame
+
+
+def _fit_modeling_stack(
+    *,
+    model_name: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_evaluation: pd.DataFrame,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+) -> FittedModelingStack:
+    _validate_fold_artifacts(X_train, X_evaluation, y_train)
+
+    preprocessor = modeling_preprocessing.ModelPreprocessor(
+        preprocessing_parameters,
+    )
+    selected_train, filtered_y_train = preprocessor.fit_resample(X_train, y_train)
+
+    estimator = _build_model(model_name, modeling_parameters)
+    estimator.fit(selected_train, filtered_y_train)
+    model = modeling_model_bundle.ModelBundle(
+        model_name=model_name,
+        preprocessor=preprocessor,
+        estimator=estimator,
+    )
+
+    return FittedModelingStack(
+        model=model,
+        selected_features=preprocessor.selected_features,
+        evaluation_features=X_evaluation,
+        filtered_training_row_count=preprocessor.filtered_training_row_count,
+    )
+
+
+def _build_cross_validation_splitter(
+    y_train: pd.Series,
+    cross_validation_config: dict[str, Any],
+) -> StratifiedKFold:
+    n_splits = int(cross_validation_config.get("n_splits", 5))
+    if n_splits < 2:
+        raise ValueError("Cross-validation n_splits must be at least 2.")
+
+    class_counts = y_train.value_counts()
+    if len(class_counts) < 2:
+        raise ValueError("Cross-validation requires both target classes in the training split.")
+
+    min_class_count = int(class_counts.min())
+    if n_splits > min_class_count:
+        raise ValueError(
+            "Cross-validation n_splits cannot exceed the smallest class count. "
+            f"Received n_splits={n_splits} and min_class_count={min_class_count}."
+        )
+
+    return StratifiedKFold(
+        n_splits=n_splits,
+        shuffle=bool(cross_validation_config.get("shuffle", True)),
+        random_state=int(cross_validation_config.get("random_state", 73)),
+    )
+
+
+def _build_model(model_name: str, modeling_parameters: dict[str, Any]) -> Any:
+    if model_name == "logistic_regression":
+        return LogisticRegression(**modeling_parameters["logistic_regression"])
+    if model_name == "random_forest":
+        return RandomForestClassifier(**modeling_parameters["random_forest"])
+    raise ValueError(f"Unsupported model name: {model_name}")
+
+
+def _calculate_metrics(
+    y_true: pd.Series,
+    predictions: np.ndarray,
+    probabilities: np.ndarray,
+) -> dict[str, float]:
+    return {
+        "accuracy": float(accuracy_score(y_true, predictions)),
+        "precision": float(precision_score(y_true, predictions, zero_division=0)),
+        "recall": float(recall_score(y_true, predictions, zero_division=0)),
+        "f1": float(f1_score(y_true, predictions, zero_division=0)),
+        "f1_weighted": float(f1_score(y_true, predictions, average="weighted", zero_division=0)),
+        "roc_auc": _safe_roc_auc_score(y_true, probabilities),
+    }
+
+
+def _safe_roc_auc_score(y_true: pd.Series, probabilities: np.ndarray) -> float:
+    if y_true.nunique() < 2:
+        return float("nan")
+    return float(roc_auc_score(y_true, probabilities))
+
+
+def _predict_positive_class_probability(model: Any, features: pd.DataFrame) -> np.ndarray:
+    probabilities = model.predict_proba(features)
+    positive_class_index = list(model.classes_).index(1)
+    return probabilities[:, positive_class_index]
+
+
+def _summarize_cv_metrics(cv_fold_metrics: pd.DataFrame) -> pd.DataFrame:
+    summary: dict[str, float] = {}
+    for metric_name in METRIC_NAMES:
+        metric_values = cv_fold_metrics[metric_name]
+        summary[f"cv_mean_{metric_name}"] = float(metric_values.mean())
+        summary[f"cv_std_{metric_name}"] = float(metric_values.std(ddof=0))
+    return pd.DataFrame([summary])
+
+
+def _build_confusion_matrix_frame(
+    y_true: pd.Series,
+    predictions: np.ndarray,
+) -> pd.DataFrame:
+    matrix = confusion_matrix(y_true, predictions, labels=CLASS_LABELS)
+    return pd.DataFrame(matrix, index=CLASS_LABELS, columns=CLASS_LABELS)
+
+
+def _log_cv_model_to_mlflow(
+    *,
+    model: Any,
+    selected_features: list[str],
+    cv_metrics: pd.DataFrame,
+    cv_fold_metrics: pd.DataFrame,
+    test_metrics: pd.DataFrame,
+    test_confusion_matrix: pd.DataFrame,
+    test_confusion_matrix_plot: Figure,
+    parameters: dict[str, Any],
+    model_name: str,
+    run_name: str,
+    artifact_model_name: str,
+) -> pd.DataFrame:
+    _validate_mlflow_inputs(
+        model,
+        selected_features,
+        cv_metrics,
+        cv_fold_metrics,
+        test_metrics,
+        test_confusion_matrix,
+        test_confusion_matrix_plot,
+    )
+
+    mlflow_config = parameters["mlflow"]
+    mlflow.set_tracking_uri(mlflow_config["tracking_uri"])
+    experiment = mlflow.set_experiment(mlflow_config["experiment_name"])
+
+    with mlflow.start_run(run_name=run_name) as active_run:
+        mlflow.log_params(
+            {
+                "model_name": model_name,
+                "primary_development_metric": PRIMARY_DEVELOPMENT_METRIC,
+                "selected_feature_count": len(selected_features),
+            }
+        )
         mlflow.log_params(model.get_params())
-        _log_split_metrics("validation", validation_metrics)
-        _log_split_metrics("test", test_metrics)
-        mlflow.sklearn.log_model(model, name="logistic_regression_model")
+        _log_metrics_frame(cv_metrics)
+        _log_test_metrics_frame(test_metrics)
 
         with tempfile.TemporaryDirectory() as temporary_directory:
-            artifact_dir = Path(temporary_directory)
-            _write_selected_features_artifact(selected_features, artifact_dir)
-            _write_confusion_matrix_artifact(
-                validation_confusion_matrix,
-                artifact_dir / "validation_confusion_matrix.csv",
-            )
-            _write_confusion_matrix_artifact(
-                test_confusion_matrix,
-                artifact_dir / "test_confusion_matrix.csv",
-            )
-            validation_confusion_matrix_plot.savefig(
-                artifact_dir / "validation_confusion_matrix.png",
-                bbox_inches="tight",
-                dpi=150,
-            )
-            test_confusion_matrix_plot.savefig(
-                artifact_dir / "test_confusion_matrix.png",
-                bbox_inches="tight",
-                dpi=150,
-            )
-            mlflow.log_artifacts(str(artifact_dir))
+            temporary_path = Path(temporary_directory)
+            selected_features_path = temporary_path / "selected_features.json"
+            cv_metrics_path = temporary_path / "cv_metrics.csv"
+            cv_fold_metrics_path = temporary_path / "cv_fold_metrics.csv"
+            test_confusion_matrix_path = temporary_path / "test_confusion_matrix.csv"
+            test_confusion_matrix_plot_path = temporary_path / "test_confusion_matrix.png"
+            model_bundle_path = temporary_path / "model_bundle.pkl"
 
-        run_info = run.info
+            selected_features_path.write_text(
+                json.dumps(selected_features, indent=2),
+                encoding="utf-8",
+            )
+            cv_metrics.to_csv(cv_metrics_path, index=False)
+            cv_fold_metrics.to_csv(cv_fold_metrics_path, index=False)
+            test_confusion_matrix.to_csv(test_confusion_matrix_path)
+            test_confusion_matrix_plot.savefig(test_confusion_matrix_plot_path)
+            with model_bundle_path.open("wb") as model_bundle_file:
+                pickle.dump(model, model_bundle_file)
 
-    return pd.DataFrame(
-        [
-            {
-                "run_id": run_info.run_id,
-                "experiment_id": run_info.experiment_id,
-                "experiment_name": experiment_name,
-                "run_name": run_name,
-                "tracking_uri": tracking_uri,
-            }
-        ]
-    )
+            mlflow.log_artifact(str(selected_features_path))
+            mlflow.log_artifact(str(cv_metrics_path))
+            mlflow.log_artifact(str(cv_fold_metrics_path))
+            mlflow.log_artifact(str(test_confusion_matrix_path))
+            mlflow.log_artifact(str(test_confusion_matrix_plot_path))
+            mlflow.log_artifact(
+                str(model_bundle_path),
+                artifact_path=artifact_model_name,
+            )
+
+        return pd.DataFrame(
+            [
+                {
+                    "run_id": active_run.info.run_id,
+                    "experiment_id": active_run.info.experiment_id,
+                    "experiment_name": experiment.name,
+                    "run_name": run_name,
+                    "tracking_uri": mlflow_config["tracking_uri"],
+                }
+            ]
+        )
 
 
-def _validate_model(model: LogisticRegression) -> None:
-    """Raise if the model artifact is missing or the wrong type."""
-    if not isinstance(model, LogisticRegression):
-        raise ValueError("model must be a fitted LogisticRegression instance.")
-    if not hasattr(model, "classes_"):
-        raise ValueError("model must be a fitted LogisticRegression instance.")
+def _log_metrics_frame(metrics_frame: pd.DataFrame) -> None:
+    for metric_name, metric_value in metrics_frame.iloc[0].items():
+        mlflow.log_metric(metric_name, float(metric_value))
+
+
+def _log_test_metrics_frame(metrics_frame: pd.DataFrame) -> None:
+    for metric_name, metric_value in metrics_frame.iloc[0].items():
+        mlflow.log_metric(f"test_{metric_name}", float(metric_value))
 
 
 def _validate_feature_label_artifacts(
-    split_name: str,
-    features: pd.DataFrame,
-    labels: pd.Series,
-    selected_features: list[str],
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
 ) -> None:
-    """Validate model input artifacts before training or evaluation."""
-    if not isinstance(features, pd.DataFrame):
-        raise ValueError(f"{split_name} features must be a pandas DataFrame.")
+    _validate_feature_frame("X_train", X_train)
+    _validate_feature_frame("X_test", X_test)
+    _validate_label_series("y_train", y_train)
+    _validate_label_series("y_test", y_test)
+    if len(X_train) != len(y_train):
+        raise ValueError("X_train and y_train must have the same number of rows.")
+    if len(X_test) != len(y_test):
+        raise ValueError("X_test and y_test must have the same number of rows.")
+    if not X_train.index.equals(y_train.index):
+        raise ValueError("X_train and y_train indexes must match.")
+    if not X_test.index.equals(y_test.index):
+        raise ValueError("X_test and y_test indexes must match.")
+    if list(X_train.columns) != list(X_test.columns):
+        raise ValueError("X_train and X_test must have the same columns in the same order.")
+
+
+def _validate_fold_artifacts(
+    X_train: pd.DataFrame,
+    X_evaluation: pd.DataFrame,
+    y_train: pd.Series,
+) -> None:
+    _validate_feature_frame("fold X_train", X_train)
+    _validate_feature_frame("fold X_evaluation", X_evaluation)
+    _validate_label_series("fold y_train", y_train)
+    if len(X_train) != len(y_train):
+        raise ValueError("Fold X_train and y_train must have the same number of rows.")
+    if not X_train.index.equals(y_train.index):
+        raise ValueError("Fold X_train and y_train indexes must match.")
+    if list(X_train.columns) != list(X_evaluation.columns):
+        raise ValueError("Fold train and evaluation features must have matching columns.")
+
+
+def _validate_test_artifacts(
+    model: Any,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    selected_features: list[str] | None,
+) -> None:
+    if not hasattr(model, "predict") or not hasattr(model, "predict_proba"):
+        raise ValueError("model must expose predict and predict_proba methods.")
+    _validate_feature_frame("X_test", X_test)
+    _validate_label_series("y_test", y_test)
+    if len(X_test) != len(y_test):
+        raise ValueError("X_test and y_test must have the same number of rows.")
+    if not X_test.index.equals(y_test.index):
+        raise ValueError("X_test and y_test indexes must match.")
+    if selected_features is not None:
+        _validate_selected_features(selected_features, X_test)
+
+
+def _validate_feature_frame(artifact_name: str, feature_frame: pd.DataFrame) -> None:
+    if not isinstance(feature_frame, pd.DataFrame):
+        raise ValueError(f"{artifact_name} must be a pandas DataFrame.")
+    if feature_frame.empty:
+        raise ValueError(f"{artifact_name} must not be empty.")
+    if feature_frame.shape[1] == 0:
+        raise ValueError(f"{artifact_name} must contain at least one feature column.")
+    non_numeric_columns = feature_frame.select_dtypes(exclude="number").columns.tolist()
+    if non_numeric_columns:
+        raise ValueError(f"{artifact_name} contains non-numeric columns: {non_numeric_columns}")
+
+
+def _validate_label_series(artifact_name: str, labels: pd.Series) -> None:
     if not isinstance(labels, pd.Series):
-        raise ValueError(f"{split_name} labels must be a pandas Series.")
-    _validate_selected_features(selected_features)
-    if features.empty:
-        raise ValueError(f"{split_name} features must not be empty.")
+        raise ValueError(f"{artifact_name} must be a pandas Series.")
     if labels.empty:
-        raise ValueError(f"{split_name} labels must not be empty.")
-    if len(features) != len(labels):
-        raise ValueError(
-            f"{split_name} X/y row counts must match "
-            f"(features={len(features)}, labels={len(labels)})."
-        )
-    if not features.index.equals(labels.index):
-        raise ValueError(f"{split_name} X/y indexes must match.")
-
-    missing_features = sorted(set(selected_features) - set(features.columns))
-    if missing_features:
-        raise ValueError(
-            f"{split_name} features are missing selected_features: {missing_features}"
-        )
+        raise ValueError(f"{artifact_name} must not be empty.")
+    unique_values = set(labels.dropna().unique())
+    if not unique_values.issubset(set(CLASS_LABELS)):
+        raise ValueError(f"{artifact_name} must contain only labels {CLASS_LABELS}.")
 
 
-def _validate_selected_features(selected_features: list[str]) -> None:
-    """Raise if the selected feature schema is missing or malformed."""
-    if not isinstance(selected_features, list) or not selected_features:
-        raise ValueError("selected_features must be a non-empty list.")
-    if not all(isinstance(feature, str) for feature in selected_features):
-        raise ValueError("selected_features must contain only strings.")
-    if len(set(selected_features)) != len(selected_features):
-        raise ValueError("selected_features must not contain duplicates.")
-
-
-def _score_roc_auc(
-    labels: pd.Series, predicted_probabilities: np.ndarray, split_name: str
-) -> float:
-    """Return ROC AUC or raise a clear error for one-class splits."""
-    if labels.nunique() < 2:
-        raise ValueError(f"{split_name} labels must contain both classes for roc_auc.")
-    return roc_auc_score(labels, predicted_probabilities)
-
-
-def _validate_metrics_frame(metrics: pd.DataFrame, split_name: str) -> None:
-    """Raise if a persisted metrics frame is missing required columns."""
-    required_columns = {"accuracy", "precision", "recall", "f1", "f1_weighted", "roc_auc"}
-    if not isinstance(metrics, pd.DataFrame) or metrics.empty:
-        raise ValueError(f"{split_name} metrics must be a non-empty pandas DataFrame.")
-    missing_columns = sorted(required_columns - set(metrics.columns))
+def _validate_selected_features(
+    selected_features: list[str],
+    feature_frame: pd.DataFrame,
+) -> None:
+    if not isinstance(selected_features, list):
+        raise ValueError("selected_features must be a list.")
+    if not selected_features:
+        raise ValueError("selected_features must not be empty.")
+    missing_columns = [feature for feature in selected_features if feature not in feature_frame.columns]
     if missing_columns:
-        raise ValueError(f"{split_name} metrics are missing columns: {missing_columns}")
+        raise ValueError(f"selected_features are missing from X_test: {missing_columns}")
 
 
-def _validate_confusion_matrix(
-    confusion_matrix_frame: pd.DataFrame, split_name: str
+def _validate_mlflow_inputs(
+    model: Any,
+    selected_features: list[str],
+    cv_metrics: pd.DataFrame,
+    cv_fold_metrics: pd.DataFrame,
+    test_metrics: pd.DataFrame,
+    test_confusion_matrix: pd.DataFrame,
+    test_confusion_matrix_plot: Figure,
 ) -> None:
-    """Raise if a confusion matrix frame is malformed."""
-    expected_columns = ["predicted_0", "predicted_1"]
+    if not hasattr(model, "get_params"):
+        raise ValueError("model must expose get_params for MLflow logging.")
+    _validate_selected_features(selected_features, pd.DataFrame(columns=selected_features))
+    _validate_cv_metrics_frame(cv_metrics)
+    _validate_cv_fold_metrics_frame(cv_fold_metrics)
+    _validate_test_metrics_frame(test_metrics)
+    _validate_confusion_matrix_frame(test_confusion_matrix)
+    if not isinstance(test_confusion_matrix_plot, Figure):
+        raise ValueError("test_confusion_matrix_plot must be a matplotlib Figure.")
+
+
+def _validate_cv_metrics_frame(cv_metrics: pd.DataFrame) -> None:
+    required_columns = {
+        f"cv_{aggregate}_{metric_name}"
+        for aggregate in ("mean", "std")
+        for metric_name in METRIC_NAMES
+    }
+    _validate_metrics_dataframe("cv_metrics", cv_metrics, required_columns)
+    if len(cv_metrics) != 1:
+        raise ValueError("cv_metrics must contain exactly one summary row.")
+
+
+def _validate_cv_fold_metrics_frame(cv_fold_metrics: pd.DataFrame) -> None:
+    required_columns = {
+        "fold",
+        "train_row_count",
+        "filtered_train_row_count",
+        "validation_row_count",
+        "selected_feature_count",
+        *METRIC_NAMES,
+    }
+    _validate_metrics_dataframe("cv_fold_metrics", cv_fold_metrics, required_columns)
+
+
+def _validate_test_metrics_frame(test_metrics: pd.DataFrame) -> None:
+    _validate_metrics_dataframe("test_metrics", test_metrics, set(METRIC_NAMES))
+    if len(test_metrics) != 1:
+        raise ValueError("test_metrics must contain exactly one row.")
+
+
+def _validate_metrics_dataframe(
+    artifact_name: str,
+    metrics_frame: pd.DataFrame,
+    required_columns: set[str],
+) -> None:
+    if not isinstance(metrics_frame, pd.DataFrame):
+        raise ValueError(f"{artifact_name} must be a pandas DataFrame.")
+    if metrics_frame.empty:
+        raise ValueError(f"{artifact_name} must not be empty.")
+    missing_columns = required_columns.difference(metrics_frame.columns)
+    if missing_columns:
+        raise ValueError(f"{artifact_name} is missing columns: {sorted(missing_columns)}")
+
+
+def _validate_confusion_matrix_frame(confusion_matrix_frame: pd.DataFrame) -> None:
     if not isinstance(confusion_matrix_frame, pd.DataFrame):
-        raise ValueError(f"{split_name} confusion matrix must be a pandas DataFrame.")
+        raise ValueError("confusion matrix must be a pandas DataFrame.")
     if confusion_matrix_frame.shape != (2, 2):
-        raise ValueError(f"{split_name} confusion matrix must have shape 2x2.")
-    if confusion_matrix_frame.columns.tolist() != expected_columns:
-        raise ValueError(
-            f"{split_name} confusion matrix columns must be {expected_columns}."
-        )
+        raise ValueError("confusion matrix must be a 2x2 DataFrame.")
+    if _coerce_class_labels(confusion_matrix_frame.index) != CLASS_LABELS:
+        raise ValueError(f"confusion matrix index must be {CLASS_LABELS}.")
+    if _coerce_class_labels(confusion_matrix_frame.columns) != CLASS_LABELS:
+        raise ValueError(f"confusion matrix columns must be {CLASS_LABELS}.")
 
 
-def _metric_value(metrics: pd.DataFrame, metric_name: str) -> float:
-    """Return one scalar metric from a one-row metrics dataframe."""
-    return float(metrics.iloc[0][metric_name])
-
-
-def _log_split_metrics(split_name: str, metrics: pd.DataFrame) -> None:
-    """Log one split's metrics using prefixed MLflow metric names."""
-    for metric_name in ["accuracy", "precision", "recall", "f1", "f1_weighted", "roc_auc"]:
-        mlflow.log_metric(f"{split_name}_{metric_name}", _metric_value(metrics, metric_name))
-
-
-def _write_selected_features_artifact(
-    selected_features: list[str], artifact_dir: Path
-) -> None:
-    """Write selected features as a simple JSON artifact."""
-    selected_features_path = artifact_dir / "selected_features.json"
-    selected_features_path.write_text(
-        json.dumps(selected_features, indent=2),
-        encoding="utf-8",
-    )
-
-
-def _write_confusion_matrix_artifact(
-    confusion_matrix_frame: pd.DataFrame, artifact_path: Path
-) -> None:
-    """Write a confusion matrix artifact with the same persisted CSV shape."""
-    confusion_matrix_frame.to_csv(artifact_path, index=True)
+def _coerce_class_labels(labels: pd.Index) -> list[int]:
+    """Return binary labels as integers after CSV catalog round-trips."""
+    try:
+        return [int(label) for label in labels]
+    except (TypeError, ValueError):
+        return list(labels)

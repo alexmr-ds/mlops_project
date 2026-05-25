@@ -14,5 +14,18 @@ data/
 # Local MLflow tracking state
 mlruns/
 
+# Generated report exports. Markdown reports under reports/ are tracked.
+reports/**/*.html
+reports/**/*.pdf
+reports/**/*.docx
+reports/**/*.tex
+reports/**/*.aux
+reports/**/*.log
+reports/**/*.tmp
+reports/.quarto/
+reports/_site/
+reports/**/figure-html/
+reports/**/figure-latex/
+
 # Kedro Viz local state
 .viz/

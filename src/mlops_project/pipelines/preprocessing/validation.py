@@ -48,9 +48,7 @@ NON_NEGATIVE_MEASUREMENT_COLUMNS = [
     "Trihalomethanes",
     "Turbidity",
 ]
-PREPROCESSED_FEATURE_DTYPE = "float64"
 PREPROCESSED_LABEL_DTYPE = "int64"
-PREPROCESSED_LABEL_COLUMN = "label"
 MAX_FAILURE_LINES = 12
 
 
@@ -72,80 +70,41 @@ def validate_raw_data(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def validate_preprocessed_data(
+def validate_modeling_input_data(
     X_train: pd.DataFrame,
-    X_validation: pd.DataFrame,
     X_test: pd.DataFrame,
     y_train: pd.Series,
-    y_validation: pd.Series,
     y_test: pd.Series,
-    selected_features: list[str],
-) -> tuple[
-    pd.DataFrame,
-    pd.DataFrame,
-    pd.DataFrame,
-    pd.Series,
-    pd.Series,
-    pd.Series,
-    list[str],
-]:
-    """Validate final model-ready preprocessing artifacts and return them unchanged."""
-    context = _get_validation_context()
-    failures = _summarize_selected_features_failures(selected_features)
-    expected_columns = (
-        selected_features if _is_valid_selected_features(selected_features) else []
-    )
-
-    feature_splits = [
-        ("X_train", X_train, True),
-        ("X_validation", X_validation, False),
-        ("X_test", X_test, True),
-    ]
-    label_splits = [
-        ("y_train", y_train, True),
-        ("y_validation", y_validation, False),
-        ("y_test", y_test, True),
-    ]
-
-    for artifact_name, feature_frame, required_non_empty in feature_splits:
-        failures.extend(
-            _summarize_feature_artifact_failures(
-                artifact_name=artifact_name,
-                feature_frame=feature_frame,
-                selected_features=expected_columns,
-                required_non_empty=required_non_empty,
-                context=context,
-            )
-        )
-
-    for artifact_name, labels, required_non_empty in label_splits:
-        failures.extend(
-            _summarize_label_artifact_failures(
-                artifact_name=artifact_name,
-                labels=labels,
-                required_non_empty=required_non_empty,
-                context=context,
-            )
-        )
-
-    failures.extend(_summarize_split_alignment_failures("train", X_train, y_train))
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """Validate engineered train/test artifacts for downstream modeling."""
+    failures = []
+    failures.extend(_summarize_modeling_feature_failures("X_train", X_train))
+    failures.extend(_summarize_modeling_feature_failures("X_test", X_test))
     failures.extend(
-        _summarize_split_alignment_failures("validation", X_validation, y_validation)
+        _summarize_preprocessed_label_failures(
+            artifact_name="y_train",
+            labels=y_train,
+            required_non_empty=True,
+        )
     )
+    failures.extend(
+        _summarize_preprocessed_label_failures(
+            artifact_name="y_test",
+            labels=y_test,
+            required_non_empty=True,
+        )
+    )
+    failures.extend(_summarize_split_alignment_failures("train", X_train, y_train))
     failures.extend(_summarize_split_alignment_failures("test", X_test, y_test))
 
-    if failures:
-        raise ValueError(_build_preprocessed_validation_error_message(failures))
+    if isinstance(X_train, pd.DataFrame) and isinstance(X_test, pd.DataFrame):
+        if X_train.columns.tolist() != X_test.columns.tolist():
+            failures.append("X_train and X_test columns must match in order")
 
-    return (
-        X_train,
-        X_validation,
-        X_test,
-        y_train,
-        y_validation,
-        y_test,
-        selected_features,
-    )
+    if failures:
+        raise ValueError(_build_modeling_input_validation_error_message(failures))
+
+    return X_train, X_test, y_train, y_test
 
 
 def build_raw_data_expectation_suite() -> gx.ExpectationSuite:
@@ -203,62 +162,6 @@ def build_raw_data_expectation_suite() -> gx.ExpectationSuite:
     return gx.ExpectationSuite(
         name="water_potability_raw_data_contract",
         expectations=expectations,
-    )
-
-
-def build_preprocessed_feature_expectation_suite(
-    artifact_name: str, selected_features: list[str], min_row_count: int
-) -> gx.ExpectationSuite:
-    """Build a final feature-matrix expectation suite."""
-    expectations = [
-        gx.expectations.ExpectTableRowCountToBeBetween(min_value=min_row_count),
-        gx.expectations.ExpectTableColumnsToMatchSet(
-            column_set=selected_features,
-            exact_match=True,
-        ),
-    ]
-
-    for column in selected_features:
-        expectations.extend(
-            [
-                gx.expectations.ExpectColumnValuesToBeOfType(
-                    column=column,
-                    type_=PREPROCESSED_FEATURE_DTYPE,
-                ),
-                gx.expectations.ExpectColumnValuesToNotBeNull(column=column),
-            ]
-        )
-
-    return gx.ExpectationSuite(
-        name=f"{artifact_name}_preprocessed_feature_contract",
-        expectations=expectations,
-    )
-
-
-def build_preprocessed_label_expectation_suite(
-    artifact_name: str, min_row_count: int
-) -> gx.ExpectationSuite:
-    """Build a final label-vector expectation suite."""
-    return gx.ExpectationSuite(
-        name=f"{artifact_name}_preprocessed_label_contract",
-        expectations=[
-            gx.expectations.ExpectTableRowCountToBeBetween(min_value=min_row_count),
-            gx.expectations.ExpectTableColumnsToMatchSet(
-                column_set=[PREPROCESSED_LABEL_COLUMN],
-                exact_match=True,
-            ),
-            gx.expectations.ExpectColumnValuesToBeOfType(
-                column=PREPROCESSED_LABEL_COLUMN,
-                type_=PREPROCESSED_LABEL_DTYPE,
-            ),
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column=PREPROCESSED_LABEL_COLUMN,
-            ),
-            gx.expectations.ExpectColumnValuesToBeInSet(
-                column=PREPROCESSED_LABEL_COLUMN,
-                value_set=[0, 1],
-            ),
-        ],
     )
 
 
@@ -328,128 +231,39 @@ def _summarize_dtype_mismatches(data: pd.DataFrame) -> list[str]:
     return failures
 
 
-def _summarize_feature_artifact_failures(
-    artifact_name: str,
-    feature_frame: pd.DataFrame,
-    selected_features: list[str],
-    required_non_empty: bool,
-    context: Any,
+def _summarize_modeling_feature_failures(
+    artifact_name: str, feature_frame: pd.DataFrame
 ) -> list[str]:
-    """Return GE and pandas failures for one final feature dataframe."""
+    """Return failures for engineered feature matrices before learned preprocessing."""
     if not isinstance(feature_frame, pd.DataFrame):
         return [f"{artifact_name} must be a pandas DataFrame"]
 
-    min_row_count = 1 if required_non_empty else 0
-    suite = build_preprocessed_feature_expectation_suite(
-        artifact_name=artifact_name,
-        selected_features=selected_features,
-        min_row_count=min_row_count,
-    )
-    validation_result = _validate_dataframe(feature_frame, suite, context)
-    failures = _summarize_validation_result_failures(
-        artifact_name,
-        validation_result,
-    )
-    failures.extend(
-        _summarize_preprocessed_feature_frame_failures(
-            artifact_name=artifact_name,
-            feature_frame=feature_frame,
-            selected_features=selected_features,
-            required_non_empty=required_non_empty,
-        )
-    )
-    return failures
-
-
-def _summarize_label_artifact_failures(
-    artifact_name: str,
-    labels: pd.Series,
-    required_non_empty: bool,
-    context: Any,
-) -> list[str]:
-    """Return GE and pandas failures for one final label series."""
-    if not isinstance(labels, pd.Series):
-        return [f"{artifact_name} must be a pandas Series"]
-
-    min_row_count = 1 if required_non_empty else 0
-    label_frame = labels.rename(PREPROCESSED_LABEL_COLUMN).to_frame()
-    suite = build_preprocessed_label_expectation_suite(
-        artifact_name=artifact_name,
-        min_row_count=min_row_count,
-    )
-    validation_result = _validate_dataframe(label_frame, suite, context)
-    failures = _summarize_validation_result_failures(
-        artifact_name,
-        validation_result,
-    )
-    failures.extend(
-        _summarize_preprocessed_label_failures(
-            artifact_name=artifact_name,
-            labels=labels,
-            required_non_empty=required_non_empty,
-        )
-    )
-    return failures
-
-
-def _summarize_selected_features_failures(selected_features: list[str]) -> list[str]:
-    """Return failures for the selected feature schema object."""
-    if not isinstance(selected_features, list):
-        return ["selected_features must be a list of unique feature names"]
-
     failures = []
-    if not selected_features:
-        failures.append("selected_features must contain at least one feature")
-    if not all(isinstance(feature, str) for feature in selected_features):
-        failures.append("selected_features must contain only strings")
-    if all(isinstance(feature, str) for feature in selected_features) and len(
-        set(selected_features)
-    ) != len(selected_features):
-        failures.append("selected_features must not contain duplicate feature names")
-    return failures
-
-
-def _is_valid_selected_features(selected_features: list[str]) -> bool:
-    """Return whether selected_features can be used as an expected schema."""
-    return not _summarize_selected_features_failures(selected_features)
-
-
-def _summarize_preprocessed_feature_frame_failures(
-    artifact_name: str,
-    feature_frame: pd.DataFrame,
-    selected_features: list[str],
-    required_non_empty: bool,
-) -> list[str]:
-    """Return exact pandas failures for one final feature dataframe."""
-    failures = []
-    if required_non_empty and feature_frame.empty:
+    if feature_frame.empty:
         failures.append(f"{artifact_name} must contain at least one row")
+    if len(feature_frame.columns) == 0:
+        failures.append(f"{artifact_name} must contain at least one feature")
 
-    if feature_frame.columns.tolist() != selected_features:
+    non_numeric_columns = [
+        column
+        for column in feature_frame.columns
+        if not pd.api.types.is_numeric_dtype(feature_frame[column])
+    ]
+    if non_numeric_columns:
         failures.append(
-            f"{artifact_name} columns must match selected_features in order"
+            f"{artifact_name} columns must be numeric: {non_numeric_columns}"
         )
-
-    for column in feature_frame.columns:
-        observed_dtype = str(feature_frame.dtypes[column])
-        if observed_dtype != PREPROCESSED_FEATURE_DTYPE:
-            failures.append(
-                f"{artifact_name} column '{column}' must be "
-                f"{PREPROCESSED_FEATURE_DTYPE}, observed {observed_dtype!r}"
-            )
-
-    if feature_frame.isna().any().any():
-        failures.append(f"{artifact_name} contains null feature values")
 
     if feature_frame.empty:
         return failures
 
     try:
-        finite_values = np.isfinite(feature_frame.to_numpy(dtype=float))
+        values = feature_frame.to_numpy(dtype=float)
     except (TypeError, ValueError):
         failures.append(f"{artifact_name} contains non-numeric feature values")
     else:
-        if not finite_values.all():
+        finite_or_missing = np.isfinite(values) | np.isnan(values)
+        if not finite_or_missing.all():
             failures.append(f"{artifact_name} contains non-finite feature values")
 
     return failures
@@ -496,19 +310,8 @@ def _summarize_split_alignment_failures(
     return failures
 
 
-def _summarize_validation_result_failures(
-    artifact_name: str, validation_result: Any
-) -> list[str]:
-    """Return compact GE failures for one named artifact."""
-    return [
-        f"{artifact_name}: {_summarize_failed_expectation(result)}"
-        for result in validation_result.results
-        if not bool(result.success)
-    ]
-
-
-def _build_preprocessed_validation_error_message(failure_lines: list[str]) -> str:
-    """Return a compact failure summary for final preprocessing validation."""
+def _build_modeling_input_validation_error_message(failure_lines: list[str]) -> str:
+    """Return a compact failure summary for modeling input validation."""
     visible_failure_lines = failure_lines[:MAX_FAILURE_LINES]
     remaining_failures = len(failure_lines) - len(visible_failure_lines)
     if remaining_failures > 0:
@@ -517,7 +320,7 @@ def _build_preprocessed_validation_error_message(failure_lines: list[str]) -> st
         )
 
     return (
-        f"Preprocessed data validation failed: {len(failure_lines)} failure(s). "
+        f"Modeling input validation failed: {len(failure_lines)} failure(s). "
         + "; ".join(visible_failure_lines)
     )
 

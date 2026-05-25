@@ -38,7 +38,7 @@ Three features contain missing values, with `Sulfate` being the most affected:
 | ph              |        15.0 |
 | Trihalomethanes |         4.9 |
 
-The remaining six features have no missing values. Given the near-Gaussian distributions of all three affected features, **mean imputation** is appropriate — means are computed exclusively from the cleaned training split and applied to validation and test sets.
+The remaining six features have no missing values. Given the near-Gaussian distributions of all three affected features, **mean imputation** is appropriate. Means must be learned only from the active training subset: from each cross-validation fold's training rows during development, and from the full training split during the final refit.
 
 ### Class Balance
 
@@ -62,21 +62,23 @@ The near-Gaussian distributions directly motivated the following design choices:
 | Outlier removal via z-score threshold (z > 3) | Valid under near-normality assumption                                                  |
 | Mean imputation                               | Appropriate for symmetric, roughly Gaussian features; means learned from training only |
 | Z-score (standard) scaling                    | Preserves Gaussian structure; required before RFE                                      |
-| Stratified splits                             | Preserves the 61/39 class ratio across all partitions                                  |
+| Stratified split and CV folds                 | Preserves the 61/39 class ratio across the final test split and development folds      |
 
 ### Pipeline Order
 
 The pipeline is applied in the following sequence to prevent data leakage:
 
-1. Stratified train / validation / test split
+1. Stratified train / final-test split
 2. Engineered feature construction (ratios, interactions, flags)
-3. Outlier removal — **training split only**
-4. Mean imputation — statistics learned from cleaned training split
-5. Z-score scaling
-6. RFECV feature selection — **training split only**
-7. Apply selected feature mask to validation and test splits
+3. Stratified k-fold cross-validation on the training split only
+4. Per fold: outlier removal — **fold-training rows only**
+5. Per fold: mean imputation — statistics learned from cleaned fold-training rows
+6. Per fold: Z-score scaling — statistics learned from imputed fold-training rows
+7. Per fold: RFECV feature selection — **fold-training rows only**
+8. Refit the same learned preprocessing stack on the full training split
+9. Evaluate the final fitted model once on the untouched test split
 
-> **Note:** Steps 3, 4, and 6 are fit exclusively on training data. The learned parameters (mean, std, selected features) are then applied to validation and test sets to avoid leakage.
+> **Note:** Learned preprocessing is fit inside each cross-validation fold. The final test split is not used for outlier filtering, imputation, scaling, feature selection, or model selection.
 
 ---
 

@@ -6,106 +6,87 @@ validated_water_potability:
   type: kedro.io.MemoryDataset
 X_train_split:
   type: kedro.io.MemoryDataset
-X_validation_split:
-  type: kedro.io.MemoryDataset
 X_test_split:
   type: kedro.io.MemoryDataset
 y_train_split:
   type: kedro.io.MemoryDataset
+y_test_candidate:
+  type: kedro.io.MemoryDataset
 X_train_engineered:
   type: kedro.io.MemoryDataset
-X_validation_engineered:
-  type: kedro.io.MemoryDataset
 X_test_engineered:
-  type: kedro.io.MemoryDataset
-X_train_filtered:
-  type: kedro.io.MemoryDataset
-X_train_imputed:
-  type: kedro.io.MemoryDataset
-X_validation_imputed:
-  type: kedro.io.MemoryDataset
-X_test_imputed:
-  type: kedro.io.MemoryDataset
-X_train_scaled:
-  type: kedro.io.MemoryDataset
-X_validation_scaled:
-  type: kedro.io.MemoryDataset
-X_test_scaled:
-  type: kedro.io.MemoryDataset
-X_train_candidate:
-  type: kedro.io.MemoryDataset
-X_validation_candidate:
-  type: kedro.io.MemoryDataset
-X_test_candidate:
-  type: kedro.io.MemoryDataset
-selected_features_candidate:
-  type: kedro.io.MemoryDataset
-y_train_candidate:
-  type: kedro.io.MemoryDataset
-y_validation_candidate:
-  type: kedro.io.MemoryDataset
-y_test_candidate:
   type: kedro.io.MemoryDataset
 
 X_train:
   type: mlops_project.datasets.PickleDataset
   filepath: data/03_primary/X_train.pkl
-X_validation:
-  type: mlops_project.datasets.PickleDataset
-  filepath: data/03_primary/X_validation.pkl
 X_test:
   type: mlops_project.datasets.PickleDataset
   filepath: data/03_primary/X_test.pkl
 y_train:
   type: mlops_project.datasets.PickleDataset
   filepath: data/03_primary/y_train.pkl
-y_validation:
-  type: mlops_project.datasets.PickleDataset
-  filepath: data/03_primary/y_validation.pkl
 y_test:
   type: mlops_project.datasets.PickleDataset
   filepath: data/03_primary/y_test.pkl
-selected_features:
-  type: mlops_project.datasets.PickleDataset
-  filepath: data/03_primary/selected_features.pkl
-
-rfe_summary:
-  type: mlops_project.datasets.PandasCSVDataset
-  filepath: data/08_reporting/rfe_summary.csv
 
 logistic_regression_model:
   type: mlops_project.datasets.PickleDataset
   filepath: data/06_models/logistic_regression_model.pkl
+logistic_regression_selected_features:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/logistic_regression_selected_features.pkl
+random_forest_model:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/random_forest_model.pkl
+random_forest_selected_features:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/random_forest_selected_features.pkl
 
-validation_metrics:
+logistic_regression_cv_metrics:
   type: mlops_project.datasets.PandasCSVDataset
-  filepath: data/08_reporting/validation_metrics.csv
-test_metrics:
+  filepath: data/08_reporting/logistic_regression_cv_metrics.csv
+logistic_regression_cv_fold_metrics:
   type: mlops_project.datasets.PandasCSVDataset
-  filepath: data/08_reporting/test_metrics.csv
+  filepath: data/08_reporting/logistic_regression_cv_fold_metrics.csv
+logistic_regression_test_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/logistic_regression_test_metrics.csv
+random_forest_cv_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/random_forest_cv_metrics.csv
+random_forest_cv_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/random_forest_cv_fold_metrics.csv
+random_forest_test_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/random_forest_test_metrics.csv
 
-validation_confusion_matrix:
+logistic_regression_test_confusion_matrix:
   type: mlops_project.datasets.PandasCSVDataset
-  filepath: data/08_reporting/validation_confusion_matrix.csv
+  filepath: data/08_reporting/logistic_regression_test_confusion_matrix.csv
   load_args:
     index_col: 0
   save_args:
     index: true
-test_confusion_matrix:
+random_forest_test_confusion_matrix:
   type: mlops_project.datasets.PandasCSVDataset
-  filepath: data/08_reporting/test_confusion_matrix.csv
+  filepath: data/08_reporting/random_forest_test_confusion_matrix.csv
   load_args:
     index_col: 0
   save_args:
     index: true
 
-validation_confusion_matrix_plot:
+logistic_regression_test_confusion_matrix_plot:
   type: mlops_project.datasets.MatplotlibFigureDataset
-  filepath: data/08_reporting/validation_confusion_matrix.png
-test_confusion_matrix_plot:
+  filepath: data/08_reporting/logistic_regression_test_confusion_matrix.png
+random_forest_test_confusion_matrix_plot:
   type: mlops_project.datasets.MatplotlibFigureDataset
-  filepath: data/08_reporting/test_confusion_matrix.png
+  filepath: data/08_reporting/random_forest_test_confusion_matrix.png
 
 mlflow_run_info:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/08_reporting/mlflow_run_info.csv
+random_forest_mlflow_run_info:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/random_forest_mlflow_run_info.csv

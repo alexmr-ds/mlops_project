@@ -1,4 +1,4 @@
-"""Kedro pipeline definition for baseline modeling."""
+"""Kedro pipeline definitions for model training and evaluation."""
 
 from kedro.pipeline import Pipeline, node, pipeline
 
@@ -6,70 +6,106 @@ from . import nodes
 
 
 def create_pipeline(**kwargs: object) -> Pipeline:
-    """Create the modeling pipeline."""
+    """Create the aggregate modeling pipeline."""
+    del kwargs
+    return create_logistic_regression_pipeline() + create_random_forest_pipeline()
+
+
+def create_logistic_regression_pipeline(**kwargs: object) -> Pipeline:
+    """Create the LogisticRegression modeling pipeline."""
     del kwargs
     return pipeline(
         [
             node(
-                func=nodes.train_logistic_regression_model,
+                func=nodes.cross_validate_and_train_logistic_regression,
                 inputs=[
                     "X_train",
+                    "X_test",
                     "y_train",
-                    "selected_features",
+                    "y_test",
+                    "params:preprocessing",
                     "params:modeling",
                 ],
-                outputs="logistic_regression_model",
-                name="train_logistic_regression_model_node",
-            ),
-            node(
-                func=nodes.evaluate_validation_model,
-                inputs=[
+                outputs=[
                     "logistic_regression_model",
-                    "X_validation",
-                    "y_validation",
-                    "selected_features",
+                    "logistic_regression_cv_metrics",
+                    "logistic_regression_cv_fold_metrics",
+                    "logistic_regression_test_metrics",
+                    "logistic_regression_test_confusion_matrix",
+                    "logistic_regression_selected_features",
                 ],
-                outputs=["validation_metrics", "validation_confusion_matrix"],
-                name="evaluate_validation_model_node",
-            ),
-            node(
-                func=nodes.evaluate_test_model,
-                inputs=[
-                    "logistic_regression_model",
-                    "X_test",
-                    "y_test",
-                    "selected_features",
-                ],
-                outputs=["test_metrics", "test_confusion_matrix"],
-                name="evaluate_test_model_node",
-            ),
-            node(
-                func=nodes.create_validation_confusion_matrix_plot,
-                inputs="validation_confusion_matrix",
-                outputs="validation_confusion_matrix_plot",
-                name="create_validation_confusion_matrix_plot_node",
+                name="cross_validate_and_train_logistic_regression_node",
             ),
             node(
                 func=nodes.create_test_confusion_matrix_plot,
-                inputs="test_confusion_matrix",
-                outputs="test_confusion_matrix_plot",
-                name="create_test_confusion_matrix_plot_node",
+                inputs="logistic_regression_test_confusion_matrix",
+                outputs="logistic_regression_test_confusion_matrix_plot",
+                name="create_logistic_regression_test_confusion_matrix_plot_node",
             ),
             node(
                 func=nodes.log_model_to_mlflow,
                 inputs=[
                     "logistic_regression_model",
-                    "selected_features",
-                    "validation_metrics",
-                    "test_metrics",
-                    "validation_confusion_matrix",
-                    "test_confusion_matrix",
-                    "validation_confusion_matrix_plot",
-                    "test_confusion_matrix_plot",
+                    "logistic_regression_selected_features",
+                    "logistic_regression_cv_metrics",
+                    "logistic_regression_cv_fold_metrics",
+                    "logistic_regression_test_metrics",
+                    "logistic_regression_test_confusion_matrix",
+                    "logistic_regression_test_confusion_matrix_plot",
                     "params:modeling",
                 ],
                 outputs="mlflow_run_info",
                 name="log_model_to_mlflow_node",
+            ),
+        ]
+    )
+
+
+def create_random_forest_pipeline(**kwargs: object) -> Pipeline:
+    """Create the RandomForestClassifier modeling pipeline."""
+    del kwargs
+    return pipeline(
+        [
+            node(
+                func=nodes.cross_validate_and_train_random_forest,
+                inputs=[
+                    "X_train",
+                    "X_test",
+                    "y_train",
+                    "y_test",
+                    "params:preprocessing",
+                    "params:modeling",
+                ],
+                outputs=[
+                    "random_forest_model",
+                    "random_forest_cv_metrics",
+                    "random_forest_cv_fold_metrics",
+                    "random_forest_test_metrics",
+                    "random_forest_test_confusion_matrix",
+                    "random_forest_selected_features",
+                ],
+                name="cross_validate_and_train_random_forest_node",
+            ),
+            node(
+                func=nodes.create_test_confusion_matrix_plot,
+                inputs="random_forest_test_confusion_matrix",
+                outputs="random_forest_test_confusion_matrix_plot",
+                name="create_random_forest_test_confusion_matrix_plot_node",
+            ),
+            node(
+                func=nodes.log_random_forest_to_mlflow,
+                inputs=[
+                    "random_forest_model",
+                    "random_forest_selected_features",
+                    "random_forest_cv_metrics",
+                    "random_forest_cv_fold_metrics",
+                    "random_forest_test_metrics",
+                    "random_forest_test_confusion_matrix",
+                    "random_forest_test_confusion_matrix_plot",
+                    "params:modeling",
+                ],
+                outputs="random_forest_mlflow_run_info",
+                name="log_random_forest_to_mlflow_node",
             ),
         ]
     )

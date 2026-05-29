@@ -20,49 +20,74 @@ modeling:
     n_splits: 5
     shuffle: true
     random_state: 73
+
   logistic_regression:
     max_iter: 1000
     solver: lbfgs
     random_state: 73
+
   random_forest:
     n_estimators: 300
     max_depth: null
     min_samples_leaf: 1
+    min_samples_split: 2
+    max_features: sqrt
+    bootstrap: true
+    class_weight: null
+    criterion: gini
+    max_samples: null
     random_state: 73
     n_jobs: -1
-    class_weight: null
+
   random_forest_optimization:
     enabled: true
-    n_trials: 30
+    n_trials: 75
     sampler: tpe
     random_state: 73
     objective_metric: f1
+
     search_space:
       n_estimators:
         type: int
-        low: 100
-        high: 500
-        step: 50
+        low: 300
+        high: 1000
+        step: 100
+
       max_depth:
         type: categorical
-        choices: [null, 3, 5, 10, 15, 20, 30]
+        choices: [5, 10, 15, 20, 30, 50, null]
+
       min_samples_leaf:
         type: int
         low: 1
-        high: 10
+        high: 20
+
       min_samples_split:
         type: int
         low: 2
-        high: 20
+        high: 40
+
       max_features:
         type: categorical
-        choices: [sqrt, log2, null]
+        choices: [sqrt, log2, 0.3, 0.5, 0.7, null]
+
       bootstrap:
         type: categorical
-        choices: [true, false]
+        choices: [true]
+
       class_weight:
         type: categorical
-        choices: [null, balanced]
+        choices: [null, balanced, balanced_subsample]
+
+      criterion:
+        type: categorical
+        choices: [gini, entropy, log_loss]
+
+      max_samples:
+        type: float
+        low: 0.6
+        high: 1.0
+
   mlflow:
     tracking_uri: mlruns
     experiment_name: water_potability_modeling

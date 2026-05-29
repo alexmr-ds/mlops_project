@@ -1,13 +1,13 @@
 # MLOps Project
 
-Current scope: Kedro-based preprocessing and registered per-model modeling for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified train/test splitting, split-wise deterministic feature engineering, fold-local learned preprocessing, k-fold cross-validation, LogisticRegression baseline training, Optuna-optimized RandomForestClassifier training, final holdout test evaluation, local MLflow tracking with logged pyfunc models, prediction-ready persisted model bundles, and persisted reporting artifacts, with exploratory analysis still available under `notebooks/`.
+Current scope: Kedro-based preprocessing and registered per-model modeling for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified train/test splitting, split-wise deterministic feature engineering, fold-local learned preprocessing, fold-local model-ready feature validation, k-fold cross-validation, LogisticRegression baseline training, Optuna-optimized RandomForestClassifier training, final holdout test evaluation, local MLflow tracking with logged pyfunc models, prediction-ready persisted model bundles, and persisted reporting artifacts, with exploratory analysis still available under `notebooks/`.
 
 ## Repository Tree
 
 ```text
 .
 ├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, local data, and MLflow runs.
-├── CONTEXT.md                                     - Project language for raw data validation, preprocessing, model evaluation, and tuning boundaries.
+├── CONTEXT.md                                     - Project language for raw data validation, learned preprocessing, model-ready validation, model evaluation, and tuning boundaries.
 ├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
 ├── main.py                                        - CLI entrypoint for local data bootstrap tasks.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
@@ -35,15 +35,19 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 │       ├── datasets.py                            - Local Kedro dataset implementations for CSV, pickle, and matplotlib figure persistence.
 │       ├── modeling/
 │       │   ├── __init__.py                        - Reusable modeling component package marker.
+│       │   ├── evaluation.py                      - Model construction, fold-local cross-validation, final holdout evaluation, metrics, and artifact validation helpers.
+│       │   ├── experiment_tracking.py             - MLflow logging for fitted model bundles, metrics, confusion matrices, selected features, and Optuna artifacts.
 │       │   ├── model_bundle.py                    - Prediction-ready persisted model bundle that applies fitted learned preprocessing before estimator prediction.
-│       │   └── preprocessing.py                   - Fold-local learned preprocessing stack used during CV and final model refit.
+│       │   ├── optimization.py                    - Optuna RandomForest tuning, search-space sampling, selected-parameter resolution, and trial artifact builders.
+│       │   ├── preprocessing.py                   - Fold-local learned preprocessing stack used during CV and final model refit.
+│       │   └── validation.py                      - Great Expectations model-ready feature contract and label alignment checks after learned preprocessing.
 │       ├── pipeline_registry.py                   - Registers preprocessing, aggregate modeling, per-model modeling, and default Kedro pipelines.
 │       ├── settings.py                            - Project settings entrypoint for Kedro.
 │       └── pipelines/
 │           ├── __init__.py                        - Pipeline namespace package.
 │           ├── modeling/
 │           │   ├── __init__.py                    - Re-exports the modeling pipeline factory.
-│           │   ├── nodes.py                       - Cross-validated LogisticRegression training, Optuna-based RandomForest tuning, final testing, model bundle persistence, plotting, and MLflow logging node implementations.
+│           │   ├── nodes.py                       - Kedro adapters for modeling workflows and final confusion-matrix plot creation.
 │           │   └── pipeline.py                    - Kedro node graphs for aggregate and per-model modeling workflows.
 │           └── preprocessing/
 │               ├── __init__.py                    - Re-exports the preprocessing pipeline factory.
@@ -58,8 +62,10 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
         ├── modeling/
         │   ├── __init__.py                        - Modeling test package marker.
         │   ├── test_nodes.py                      - Unit tests for cross-validated LogisticRegression training, Optuna-based RandomForest tuning, model bundles, final testing, plotting, and MLflow logging behavior.
+        │   ├── test_optimization.py               - Unit tests for RandomForest optimization helper behavior.
         │   ├── test_pipeline.py                   - Unit tests for modeling pipeline assembly.
-        │   └── test_preprocessing.py              - Unit tests for leakage-safe model-local learned preprocessing.
+        │   ├── test_preprocessing.py              - Unit tests for leakage-safe model-local learned preprocessing.
+        │   └── test_validation.py                 - Unit tests for model-ready feature and filtered-label validation contracts.
         └── preprocessing/
             ├── __init__.py                        - Preprocessing test package marker.
             ├── test_nodes.py                      - Unit tests for split and deterministic feature-engineering behavior.
@@ -99,6 +105,7 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 - Feature engineering order: split first, then derive the requested ratios, interactions, stress indicators, risk scores, and binary flags on each split
 - Modeling-input validation: validates aligned train/test indexes, matching feature-column order, numeric engineered features, finite-or-missing feature values, and binary `int64` labels before persistence
 - Learned preprocessing is intentionally no longer fit in the preprocessing pipeline. `mlops_project.modeling.preprocessing.ModelPreprocessor` fits outlier filtering, imputation, scaling, and RFECV feature selection inside each cross-validation fold and inside the final full-training refit to avoid leakage. The final fitted preprocessing stack is persisted with each model bundle.
+- Model-ready feature validation: Great Expectations validates transformed estimator inputs after learned preprocessing for non-empty rows, exact selected feature columns and order, numeric values, and no nulls; pandas/numpy checks reject infinite feature values and invalid filtered-label alignment before estimator fitting or prediction.
 - Persisted outputs:
   - `X_train.pkl`, `X_test.pkl`: engineered feature matrices before learned preprocessing
   - `y_train.pkl`, `y_test.pkl`: split labels
@@ -109,11 +116,12 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 - Nonlinear model: `RandomForestClassifier` selected by Optuna TPE hyperparameter optimization with `random_state=73` and `n_jobs=-1` fixed
 - Training data: engineered and validated `X_train` and `y_train`
 - Development evaluation: stratified k-fold cross-validation on the training split only
-- Hyperparameter optimization: RandomForest uses `modeling.random_forest_optimization.n_trials=30` by default and maximizes binary `cv_mean_f1` on training-set cross-validation folds only
+- Hyperparameter optimization: RandomForest uses `modeling.random_forest_optimization.n_trials=75` by default and maximizes binary `cv_mean_f1` on training-set cross-validation folds only
 - Final holdout evaluation: engineered and validated `X_test` and `y_test`, evaluated once after each model is refit on all training data
 - Cross-validation config: `modeling.cross_validation.n_splits=5`, `shuffle=true`, `random_state=73`
 - Fold-local learned preprocessing: outlier removal on fold-training rows only, mean imputation, standard scaling, RFECV feature selection, then model fitting
 - Final learned preprocessing: the same stack is refit once on the full training split before final test evaluation
+- Model-ready validation: transformed fold-training, fold-validation, final-test, and inference feature matrices are validated before estimator use
 - Primary development metric: `cv_mean_f1`
 - Additional metrics: accuracy, precision, recall, F1, weighted F1, ROC AUC, and confusion matrix for the final test split
 - MLflow tracking: local `mlruns/` with experiment `water_potability_modeling` and separate runs `logistic_regression_baseline` and `random_forest_nonlinear_probe`; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; RandomForest also logs best parameters and consolidated Optuna trial tables

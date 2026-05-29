@@ -1,6 +1,7 @@
 """Unit tests for model-local learned preprocessing."""
 
 import unittest
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -37,6 +38,70 @@ class ModelPreprocessorTests(unittest.TestCase):
         self.assertListEqual(transformed_y.index.tolist(), y_train.index.tolist())
         self.assertEqual(len(transformed_evaluation), len(X_evaluation))
         self.assertAlmostEqual(transformed_evaluation.loc[20, 'feature_a'], 0.0, places=6)
+
+    def test_fit_resample_validates_model_ready_training_artifacts(self) -> None:
+        X_train = pd.DataFrame(
+            {
+                'feature_a': [1.0, 3.0, 5.0, 7.0],
+                'feature_b': [2.0, 4.0, 6.0, 8.0],
+            }
+        )
+        y_train = pd.Series([0, 1, 0, 1], index=X_train.index)
+        preprocessor = preprocessing.ModelPreprocessor(_parameters(rfe_enabled=False))
+
+        with mock.patch.object(
+            preprocessing.modeling_validation,
+            'validate_model_ready_training_artifacts',
+            side_effect=lambda features, labels, expected_columns, artifact_name: (
+                features,
+                labels,
+            ),
+        ) as validator:
+            preprocessor.fit_resample(X_train, y_train)
+
+        self.assertEqual(validator.call_count, 1)
+        self.assertListEqual(
+            list(validator.call_args.args[2]),
+            ['feature_a', 'feature_b'],
+        )
+        self.assertEqual(
+            validator.call_args.kwargs['artifact_name'],
+            'model-ready training',
+        )
+
+    def test_transform_validates_model_ready_evaluation_features(self) -> None:
+        X_train = pd.DataFrame(
+            {
+                'feature_a': [1.0, 3.0, 5.0, 7.0],
+                'feature_b': [2.0, 4.0, 6.0, 8.0],
+            }
+        )
+        y_train = pd.Series([0, 1, 0, 1], index=X_train.index)
+        X_evaluation = pd.DataFrame(
+            {
+                'feature_a': [9.0],
+                'feature_b': [10.0],
+            }
+        )
+        preprocessor = preprocessing.ModelPreprocessor(_parameters(rfe_enabled=False))
+        preprocessor.fit_resample(X_train, y_train)
+
+        with mock.patch.object(
+            preprocessing.modeling_validation,
+            'validate_model_ready_features',
+            side_effect=lambda features, expected_columns, artifact_name: features,
+        ) as validator:
+            preprocessor.transform(X_evaluation)
+
+        self.assertEqual(validator.call_count, 1)
+        self.assertListEqual(
+            list(validator.call_args.args[1]),
+            ['feature_a', 'feature_b'],
+        )
+        self.assertEqual(
+            validator.call_args.kwargs['artifact_name'],
+            'model-ready evaluation',
+        )
 
     def test_fit_resample_removes_outliers_only_from_training_rows(self) -> None:
         X_train = pd.DataFrame(

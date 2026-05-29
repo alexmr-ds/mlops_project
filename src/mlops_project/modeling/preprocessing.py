@@ -13,6 +13,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
+from mlops_project.modeling import validation as modeling_validation
+
 
 @dataclass
 class ModelPreprocessor:
@@ -57,7 +59,12 @@ class ModelPreprocessor:
         )
 
         selected_train = self._fit_select_features(scaled_train, filtered_y_train)
-        return selected_train, filtered_y_train
+        return modeling_validation.validate_model_ready_training_artifacts(
+            selected_train,
+            filtered_y_train,
+            self.selected_features,
+            artifact_name="model-ready training",
+        )
 
     def transform(self, X_evaluation: pd.DataFrame) -> pd.DataFrame:
         """Apply fitted learned transforms to evaluation rows."""
@@ -74,7 +81,12 @@ class ModelPreprocessor:
             columns=imputed_evaluation.columns,
             index=imputed_evaluation.index,
         )
-        return scaled_evaluation.loc[:, self.selected_features].copy()
+        selected_evaluation = scaled_evaluation.loc[:, self.selected_features].copy()
+        return modeling_validation.validate_model_ready_features(
+            selected_evaluation,
+            self.selected_features,
+            artifact_name="model-ready evaluation",
+        )
 
     def _fit_select_features(
         self,

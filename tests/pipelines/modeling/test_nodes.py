@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+import json
 
 import mlflow
 import numpy as np
@@ -91,6 +92,8 @@ class ModelingNodeTests(unittest.TestCase):
         self.assertEqual(best_params['random_state'], 73)
         self.assertEqual(best_params['n_jobs'], -1)
         self.assertIn(best_params['n_estimators'], [5, 10])
+        self.assertGreaterEqual(best_params['max_samples'], 0.6)
+        self.assertLessEqual(best_params['max_samples'], 1.0)
         self.assertEqual(cv_metrics.shape, (1, 12))
         self.assertIn('cv_mean_f1', cv_metrics.columns)
         self.assertEqual(len(cv_fold_metrics), 3)
@@ -215,6 +218,8 @@ class ModelingNodeTests(unittest.TestCase):
                 figure,
                 parameters,
             )
+            client = mlflow.tracking.MlflowClient(tracking_uri=tracking_dir)
+            run = client.get_run(run_info.loc[0, 'run_id'])
             logged_model = mlflow.pyfunc.load_model(
                 f"runs:/{run_info.loc[0, 'run_id']}/logistic_regression_model"
             )
@@ -225,6 +230,7 @@ class ModelingNodeTests(unittest.TestCase):
             run_info.loc[0, 'experiment_name'],
             'water_potability_modeling',
         )
+        self.assertEqual(run.data.tags['cv_strategy'], 'stratified_kfold_3')
         self.assertEqual(len(logged_model.predict(X_test)), len(X_test))
 
     def test_log_random_forest_to_mlflow_returns_run_info(self) -> None:
@@ -266,6 +272,15 @@ class ModelingNodeTests(unittest.TestCase):
                 figure,
                 parameters,
             )
+            client = mlflow.tracking.MlflowClient(tracking_uri=tracking_dir)
+            run = client.get_run(run_info.loc[0, 'run_id'])
+            artifacts = client.list_artifacts(run_info.loc[0, 'run_id'])
+            search_space_artifact = client.download_artifacts(
+                run_info.loc[0, 'run_id'],
+                'optuna_search_space.json',
+            )
+            with open(search_space_artifact, encoding='utf-8') as search_space_file:
+                logged_search_space = json.load(search_space_file)
             logged_model = mlflow.pyfunc.load_model(
                 f"runs:/{run_info.loc[0, 'run_id']}/random_forest_model"
             )
@@ -275,6 +290,13 @@ class ModelingNodeTests(unittest.TestCase):
         self.assertEqual(
             run_info.loc[0, 'run_name'],
             'random_forest_nonlinear_probe',
+        )
+        self.assertEqual(run.data.tags['cv_strategy'], 'stratified_kfold_3')
+        self.assertEqual(run.data.tags['tuning_strategy'], 'optuna_tpe')
+        self.assertIn('optuna_search_space.json', [artifact.path for artifact in artifacts])
+        self.assertDictEqual(
+            logged_search_space,
+            parameters['random_forest_optimization']['search_space'],
         )
         self.assertEqual(len(logged_model.predict(X_test)), len(X_test))
 
@@ -342,8 +364,9 @@ def _modeling_parameters() -> dict[str, object]:
                 'min_samples_leaf': {'type': 'categorical', 'choices': [1, 2]},
                 'min_samples_split': {'type': 'categorical', 'choices': [2, 4]},
                 'max_features': {'type': 'categorical', 'choices': [None, 'sqrt']},
-                'bootstrap': {'type': 'categorical', 'choices': [True, False]},
+                'bootstrap': {'type': 'categorical', 'choices': [True]},
                 'class_weight': {'type': 'categorical', 'choices': [None, 'balanced']},
+                'max_samples': {'type': 'float', 'low': 0.6, 'high': 1.0},
             },
         },
         'mlflow': {

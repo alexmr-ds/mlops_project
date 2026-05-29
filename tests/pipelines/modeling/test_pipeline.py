@@ -168,12 +168,34 @@ class ModelingPipelineTests(unittest.TestCase):
         self.assertIn('random_forest_optuna_trials', catalog)
         self.assertIn('random_forest_optuna_fold_metrics', catalog)
 
+    def test_project_parameters_satisfy_random_forest_pipeline_inputs(self) -> None:
+        parameters = _parameters_config()
+        pipeline = create_random_forest_pipeline()
+        parameter_inputs = {
+            pipeline_input.removeprefix('params:')
+            for pipeline_input in pipeline.inputs()
+            if pipeline_input.startswith('params:')
+        }
+
+        self.assertTrue(parameter_inputs.issubset(parameters))
+        self.assertIn('modeling', parameters)
+        self.assertIn('random_forest', parameters['modeling'])
+        self.assertIn('random_forest_optimization', parameters['modeling'])
+        self.assertIn('mlflow', parameters['modeling'])
+
 
 def _catalog_config() -> dict[str, object]:
     """Return the project catalog configuration."""
     project_root = Path(__file__).resolve().parents[3]
     config_loader = OmegaConfigLoader(conf_source=str(project_root / 'conf'))
     return config_loader['catalog']
+
+
+def _parameters_config() -> dict[str, object]:
+    """Return the project parameters configuration."""
+    project_root = Path(__file__).resolve().parents[3]
+    config_loader = OmegaConfigLoader(conf_source=str(project_root / 'conf'))
+    return config_loader['parameters']
 
 
 if __name__ == '__main__':

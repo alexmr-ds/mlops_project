@@ -44,12 +44,19 @@ class PipelineTests(unittest.TestCase):
         self.assertIn('preprocessing', pipelines)
         self.assertIn('modeling_logistic_regression', pipelines)
         self.assertIn('modeling_random_forest', pipelines)
+        self.assertIn('modeling_extra_trees', pipelines)
+        self.assertIn('modeling_hist_gradient_boosting', pipelines)
+        self.assertIn('modeling_xgboost', pipelines)
         self.assertIn('modeling', pipelines)
         self.assertIn('__default__', pipelines)
         self.assertEqual(
             len(pipelines['modeling'].nodes),
             len(pipelines['modeling_logistic_regression'].nodes)
-            + len(pipelines['modeling_random_forest'].nodes),
+            + len(pipelines['modeling_random_forest'].nodes)
+            + len(pipelines['modeling_extra_trees'].nodes)
+            + len(pipelines['modeling_hist_gradient_boosting'].nodes)
+            + len(pipelines['modeling_xgboost'].nodes)
+            + 1,
         )
         self.assertGreater(
             len(pipelines['__default__'].nodes),

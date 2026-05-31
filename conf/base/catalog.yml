@@ -45,6 +45,33 @@ random_forest_selected_features:
 random_forest_best_params:
   type: mlops_project.datasets.PickleDataset
   filepath: data/06_models/random_forest_best_params.pkl
+extra_trees_model:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/extra_trees_model.pkl
+extra_trees_selected_features:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/extra_trees_selected_features.pkl
+extra_trees_best_params:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/extra_trees_best_params.pkl
+hist_gradient_boosting_model:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/hist_gradient_boosting_model.pkl
+hist_gradient_boosting_selected_features:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/hist_gradient_boosting_selected_features.pkl
+hist_gradient_boosting_best_params:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/hist_gradient_boosting_best_params.pkl
+xgboost_model:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/xgboost_model.pkl
+xgboost_selected_features:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/xgboost_selected_features.pkl
+xgboost_best_params:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/06_models/xgboost_best_params.pkl
 
 logistic_regression_cv_metrics:
   type: mlops_project.datasets.PandasCSVDataset
@@ -70,6 +97,54 @@ random_forest_optuna_trials:
 random_forest_optuna_fold_metrics:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/08_reporting/random_forest_optuna_fold_metrics.csv
+extra_trees_cv_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/extra_trees_cv_metrics.csv
+extra_trees_cv_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/extra_trees_cv_fold_metrics.csv
+extra_trees_test_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/extra_trees_test_metrics.csv
+extra_trees_optuna_trials:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/extra_trees_optuna_trials.csv
+extra_trees_optuna_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/extra_trees_optuna_fold_metrics.csv
+hist_gradient_boosting_cv_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/hist_gradient_boosting_cv_metrics.csv
+hist_gradient_boosting_cv_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/hist_gradient_boosting_cv_fold_metrics.csv
+hist_gradient_boosting_test_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/hist_gradient_boosting_test_metrics.csv
+hist_gradient_boosting_optuna_trials:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/hist_gradient_boosting_optuna_trials.csv
+hist_gradient_boosting_optuna_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/hist_gradient_boosting_optuna_fold_metrics.csv
+xgboost_cv_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/xgboost_cv_metrics.csv
+xgboost_cv_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/xgboost_cv_fold_metrics.csv
+xgboost_test_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/xgboost_test_metrics.csv
+xgboost_optuna_trials:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/xgboost_optuna_trials.csv
+xgboost_optuna_fold_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/xgboost_optuna_fold_metrics.csv
+model_comparison:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/model_comparison.csv
 
 logistic_regression_test_confusion_matrix:
   type: mlops_project.datasets.PandasCSVDataset
@@ -85,6 +160,27 @@ random_forest_test_confusion_matrix:
     index_col: 0
   save_args:
     index: true
+extra_trees_test_confusion_matrix:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/extra_trees_test_confusion_matrix.csv
+  load_args:
+    index_col: 0
+  save_args:
+    index: true
+hist_gradient_boosting_test_confusion_matrix:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/hist_gradient_boosting_test_confusion_matrix.csv
+  load_args:
+    index_col: 0
+  save_args:
+    index: true
+xgboost_test_confusion_matrix:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/xgboost_test_confusion_matrix.csv
+  load_args:
+    index_col: 0
+  save_args:
+    index: true
 
 logistic_regression_test_confusion_matrix_plot:
   type: mlops_project.datasets.MatplotlibFigureDataset
@@ -92,6 +188,15 @@ logistic_regression_test_confusion_matrix_plot:
 random_forest_test_confusion_matrix_plot:
   type: mlops_project.datasets.MatplotlibFigureDataset
   filepath: data/08_reporting/random_forest_test_confusion_matrix.png
+extra_trees_test_confusion_matrix_plot:
+  type: mlops_project.datasets.MatplotlibFigureDataset
+  filepath: data/08_reporting/extra_trees_test_confusion_matrix.png
+hist_gradient_boosting_test_confusion_matrix_plot:
+  type: mlops_project.datasets.MatplotlibFigureDataset
+  filepath: data/08_reporting/hist_gradient_boosting_test_confusion_matrix.png
+xgboost_test_confusion_matrix_plot:
+  type: mlops_project.datasets.MatplotlibFigureDataset
+  filepath: data/08_reporting/xgboost_test_confusion_matrix.png
 
 mlflow_run_info:
   type: mlops_project.datasets.PandasCSVDataset
@@ -99,3 +204,12 @@ mlflow_run_info:
 random_forest_mlflow_run_info:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/08_reporting/random_forest_mlflow_run_info.csv
+extra_trees_mlflow_run_info:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/extra_trees_mlflow_run_info.csv
+hist_gradient_boosting_mlflow_run_info:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/hist_gradient_boosting_mlflow_run_info.csv
+xgboost_mlflow_run_info:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/xgboost_mlflow_run_info.csv

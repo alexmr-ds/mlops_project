@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -18,6 +19,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import StratifiedKFold
+from xgboost import XGBClassifier
 
 from mlops_project.modeling import model_bundle as modeling_model_bundle
 from mlops_project.modeling import preprocessing as modeling_preprocessing
@@ -238,6 +240,14 @@ def build_model(model_name: str, modeling_parameters: dict[str, Any]) -> Any:
         return LogisticRegression(**modeling_parameters["logistic_regression"])
     if model_name == "random_forest":
         return RandomForestClassifier(**modeling_parameters["random_forest"])
+    if model_name == "extra_trees":
+        return ExtraTreesClassifier(**modeling_parameters["extra_trees"])
+    if model_name == "hist_gradient_boosting":
+        return HistGradientBoostingClassifier(
+            **modeling_parameters["hist_gradient_boosting"]
+        )
+    if model_name == "xgboost":
+        return XGBClassifier(**modeling_parameters["xgboost"])
     raise ValueError(f"Unsupported model name: {model_name}")
 
 

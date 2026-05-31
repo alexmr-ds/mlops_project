@@ -170,7 +170,7 @@ def _parameters(
             'step': 1,
             'cv_folds': 2,
             'scoring': 'roc_auc',
-            'n_jobs': -1,
+            'n_jobs': 1,
             'logistic_max_iter': 1000,
             'random_state': 73,
         },

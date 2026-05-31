@@ -11,6 +11,14 @@ from mlops_project.modeling import evaluation as modeling_evaluation
 
 PRIMARY_DEVELOPMENT_METRIC = modeling_evaluation.PRIMARY_DEVELOPMENT_METRIC
 OPTUNA_TRIAL_PARAM_PREFIX = "param_"
+TUNED_MODEL_NAMES = (
+    "random_forest",
+    "extra_trees",
+    "hist_gradient_boosting",
+    "xgboost",
+)
+BOOTSTRAP_MAX_SAMPLE_MODELS = {"random_forest", "extra_trees"}
+N_ESTIMATOR_MODELS = {"random_forest", "extra_trees", "xgboost"}
 
 
 def tune_random_forest_hyperparameters(
@@ -20,20 +28,39 @@ def tune_random_forest_hyperparameters(
     modeling_parameters: dict[str, Any],
 ) -> tuple[dict[str, Any], pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Tune random forest hyperparameters with training-set-only CV."""
+    return tune_model_hyperparameters(
+        model_name="random_forest",
+        X_train=X_train,
+        y_train=y_train,
+        preprocessing_parameters=preprocessing_parameters,
+        modeling_parameters=modeling_parameters,
+    )
+
+
+def tune_model_hyperparameters(
+    *,
+    model_name: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+) -> tuple[dict[str, Any], pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Tune one supported model family with training-set-only CV."""
+    validate_tuned_model_name(model_name)
     modeling_evaluation.validate_training_artifacts(X_train, y_train)
-    optimization_config = random_forest_optimization_config(modeling_parameters)
+    optimization_config = model_optimization_config(model_name, modeling_parameters)
     trial_fold_frames: list[pd.DataFrame] = []
 
     if not bool(optimization_config.get("enabled", True)):
-        best_params = resolve_random_forest_parameters(modeling_parameters)
+        best_params = resolve_model_parameters(modeling_parameters, model_name)
         cv_result = modeling_evaluation.cross_validate_model(
-            model_name="random_forest",
+            model_name=model_name,
             X_train=X_train,
             y_train=y_train,
             preprocessing_parameters=preprocessing_parameters,
             modeling_parameters=with_model_parameters(
                 modeling_parameters,
-                "random_forest",
+                model_name,
                 best_params,
             ),
         )
@@ -53,19 +80,20 @@ def tune_random_forest_hyperparameters(
     study = optuna.create_study(direction="maximize", sampler=sampler)
 
     def objective(trial: optuna.Trial) -> float:
-        trial_params = sample_random_forest_parameters(trial, optimization_config)
-        model_params = resolve_random_forest_parameters(
+        trial_params = sample_model_parameters(trial, optimization_config)
+        model_params = resolve_model_parameters(
             modeling_parameters,
+            model_name,
             selected_params=trial_params,
         )
         cv_result = modeling_evaluation.cross_validate_model(
-            model_name="random_forest",
+            model_name=model_name,
             X_train=X_train,
             y_train=y_train,
             preprocessing_parameters=preprocessing_parameters,
             modeling_parameters=with_model_parameters(
                 modeling_parameters,
-                "random_forest",
+                model_name,
                 model_params,
             ),
         )
@@ -109,20 +137,41 @@ def random_forest_optimization_config(
     modeling_parameters: dict[str, Any],
 ) -> dict[str, Any]:
     """Return validated RandomForest optimization parameters."""
-    config = modeling_parameters.get("random_forest_optimization", {})
+    return model_optimization_config("random_forest", modeling_parameters)
+
+
+def model_optimization_config(
+    model_name: str,
+    modeling_parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """Return validated optimization parameters for one model family."""
+    validate_tuned_model_name(model_name)
+    config_name = optimization_config_name(model_name)
+    config = modeling_parameters.get(config_name, {})
     if not isinstance(config, dict):
-        raise ValueError("random_forest_optimization must be a mapping.")
+        raise ValueError(f"{config_name} must be a mapping.")
     if "n_trials" not in config:
-        raise ValueError("random_forest_optimization.n_trials is required.")
+        raise ValueError(f"{config_name}.n_trials is required.")
     if int(config["n_trials"]) < 1:
-        raise ValueError("random_forest_optimization.n_trials must be at least 1.")
+        raise ValueError(f"{config_name}.n_trials must be at least 1.")
     if str(config.get("objective_metric", "f1")) != "f1":
-        raise ValueError("Random forest optimization currently supports only f1.")
+        raise ValueError(f"{config_name} currently supports only f1.")
     if bool(config.get("enabled", True)):
         search_space = config.get("search_space")
         if not isinstance(search_space, dict) or not search_space:
-            raise ValueError("random_forest_optimization.search_space must not be empty.")
+            raise ValueError(f"{config_name}.search_space must not be empty.")
     return config
+
+
+def optimization_config_name(model_name: str) -> str:
+    """Return the modeling parameter key for one model family's optimization config."""
+    return f"{model_name}_optimization"
+
+
+def validate_tuned_model_name(model_name: str) -> None:
+    """Validate that a model family supports Optuna tuning."""
+    if model_name not in TUNED_MODEL_NAMES:
+        raise ValueError(f"Unsupported tuned model name: {model_name}")
 
 
 def build_optuna_sampler(
@@ -141,6 +190,14 @@ def sample_random_forest_parameters(
     optimization_config: dict[str, Any],
 ) -> dict[str, Any]:
     """Sample one RandomForest parameter set from the configured search space."""
+    return sample_model_parameters(trial, optimization_config)
+
+
+def sample_model_parameters(
+    trial: optuna.Trial,
+    optimization_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Sample one model parameter set from the configured search space."""
     search_space = optimization_config["search_space"]
     return {
         parameter_name: sample_optuna_parameter(
@@ -196,31 +253,64 @@ def resolve_random_forest_parameters(
     selected_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Merge base and selected RandomForest parameters."""
-    parameters = dict(modeling_parameters["random_forest"])
+    return resolve_model_parameters(
+        modeling_parameters,
+        "random_forest",
+        selected_params=selected_params,
+    )
+
+
+def resolve_model_parameters(
+    modeling_parameters: dict[str, Any],
+    model_name: str,
+    selected_params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Merge base and selected parameters for one tuned model family."""
+    validate_tuned_model_name(model_name)
+    parameters = dict(modeling_parameters[model_name])
     if selected_params:
         parameters.update(selected_params)
-    optimization_config = modeling_parameters.get("random_forest_optimization", {})
-    parameters["random_state"] = int(
-        optimization_config.get("random_state", parameters.get("random_state", 73))
-    )
-    parameters["n_jobs"] = int(parameters.get("n_jobs", -1))
-    if not bool(parameters.get("bootstrap", True)):
+    optimization_config = modeling_parameters.get(optimization_config_name(model_name), {})
+    if "random_state" in parameters:
+        parameters["random_state"] = int(
+            optimization_config.get("random_state", parameters.get("random_state", 73))
+        )
+    if "n_jobs" in parameters:
+        parameters["n_jobs"] = int(parameters.get("n_jobs", -1))
+    if (
+        model_name in BOOTSTRAP_MAX_SAMPLE_MODELS
+        and not bool(parameters.get("bootstrap", True))
+    ):
         parameters["max_samples"] = None
-    validate_random_forest_parameters(parameters)
+    validate_model_parameters(model_name, parameters)
     return parameters
 
 
 def validate_random_forest_parameters(parameters: dict[str, Any]) -> None:
     """Validate resolved RandomForest parameters."""
+    validate_model_parameters("random_forest", parameters)
+
+
+def validate_model_parameters(model_name: str, parameters: dict[str, Any]) -> None:
+    """Validate resolved model-family parameters."""
+    validate_tuned_model_name(model_name)
     if not isinstance(parameters, dict) or not parameters:
-        raise ValueError("random_forest parameters must be a non-empty mapping.")
-    if int(parameters.get("random_state", 73)) != 73:
-        raise ValueError("random_forest random_state must remain fixed at 73.")
-    if "n_estimators" not in parameters:
-        raise ValueError("random_forest parameters must include n_estimators.")
+        raise ValueError(f"{model_name} parameters must be a non-empty mapping.")
+    if "random_state" in parameters and int(parameters["random_state"]) != 73:
+        raise ValueError(f"{model_name} random_state must remain fixed at 73.")
+    if "n_jobs" in parameters and int(parameters["n_jobs"]) != -1:
+        raise ValueError(f"{model_name} n_jobs must remain fixed at -1.")
+    if model_name in N_ESTIMATOR_MODELS and "n_estimators" not in parameters:
+        raise ValueError(f"{model_name} parameters must include n_estimators.")
+    if model_name == "hist_gradient_boosting" and "max_iter" not in parameters:
+        raise ValueError("hist_gradient_boosting parameters must include max_iter.")
     max_samples = parameters.get("max_samples")
-    if max_samples is not None and not bool(parameters.get("bootstrap", True)):
-        raise ValueError("random_forest max_samples requires bootstrap=True.")
+    if (
+        model_name in BOOTSTRAP_MAX_SAMPLE_MODELS
+        and max_samples is not None
+        and not bool(parameters.get("bootstrap", True))
+    ):
+        raise ValueError(f"{model_name} max_samples requires bootstrap=True.")
 
 
 def with_model_parameters(

@@ -62,6 +62,7 @@ def log_cv_model_to_mlflow(
         test_metrics,
         test_confusion_matrix,
         test_confusion_matrix_plot,
+        model_name,
         best_params,
         optuna_trials,
         optuna_fold_metrics,
@@ -189,9 +190,12 @@ def build_run_tags(
     n_splits = int(cross_validation_config.get("n_splits", 5))
     tags = {"cv_strategy": f"stratified_kfold_{n_splits}"}
 
-    optimization_config = parameters.get("random_forest_optimization", {})
+    optimization_config = parameters.get(
+        modeling_optimization.optimization_config_name(model_name),
+        {},
+    )
     if (
-        model_name == "random_forest"
+        model_name in modeling_optimization.TUNED_MODEL_NAMES
         and optuna_trials is not None
         and bool(optimization_config.get("enabled", True))
     ):
@@ -230,6 +234,7 @@ def validate_mlflow_inputs(
     test_metrics: pd.DataFrame,
     test_confusion_matrix: pd.DataFrame,
     test_confusion_matrix_plot: Figure,
+    model_name: str,
     best_params: dict[str, Any] | None,
     optuna_trials: pd.DataFrame | None,
     optuna_fold_metrics: pd.DataFrame | None,
@@ -249,7 +254,7 @@ def validate_mlflow_inputs(
     if not isinstance(test_confusion_matrix_plot, Figure):
         raise ValueError("test_confusion_matrix_plot must be a matplotlib Figure.")
     if best_params is not None:
-        modeling_optimization.validate_random_forest_parameters(best_params)
+        modeling_optimization.validate_model_parameters(model_name, best_params)
     if optuna_trials is not None:
         validate_optuna_trials_frame(optuna_trials)
     if optuna_fold_metrics is not None:

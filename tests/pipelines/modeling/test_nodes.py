@@ -8,8 +8,10 @@ import mlflow
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
+from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
 
 from mlops_project.modeling import model_bundle
 from mlops_project.pipelines.modeling import nodes
@@ -103,6 +105,37 @@ class ModelingNodeTests(unittest.TestCase):
         self.assertEqual(len(trial_fold_metrics), 6)
         self.assertIn('param_n_estimators', trial_fold_metrics.columns)
 
+    def test_tune_new_tree_models_returns_trial_artifacts(self) -> None:
+        X_train, _, y_train, _ = _modeling_artifacts()
+
+        for model_name, tune_function in [
+            ('extra_trees', nodes.tune_extra_trees_hyperparameters),
+            (
+                'hist_gradient_boosting',
+                nodes.tune_hist_gradient_boosting_hyperparameters,
+            ),
+            ('xgboost', nodes.tune_xgboost_hyperparameters),
+        ]:
+            with self.subTest(model_name=model_name):
+                best_params, cv_metrics, cv_fold_metrics, trials, trial_fold_metrics = (
+                    tune_function(
+                        X_train,
+                        y_train,
+                        _preprocessing_parameters(),
+                        _modeling_parameters(),
+                    )
+                )
+
+                self.assertEqual(best_params['random_state'], 73)
+                if 'n_jobs' in best_params:
+                    self.assertEqual(best_params['n_jobs'], -1)
+                self.assertEqual(cv_metrics.shape, (1, 12))
+                self.assertIn('cv_mean_f1', cv_metrics.columns)
+                self.assertEqual(len(cv_fold_metrics), 3)
+                self.assertEqual(len(trials), 2)
+                self.assertEqual(int(trials['is_best'].sum()), 1)
+                self.assertEqual(len(trial_fold_metrics), 6)
+
     def test_train_evaluate_random_forest_with_best_params_returns_final_outputs(
         self,
     ) -> None:
@@ -138,6 +171,90 @@ class ModelingNodeTests(unittest.TestCase):
         self.assertEqual(test_metrics.shape, (1, 6))
         self.assertEqual(matrix.shape, (2, 2))
         self.assertGreaterEqual(len(selected_features), 1)
+
+    def test_train_evaluate_new_tree_models_with_best_params_returns_outputs(
+        self,
+    ) -> None:
+        X_train, X_test, y_train, y_test = _modeling_artifacts()
+
+        cases = [
+            (
+                'extra_trees',
+                nodes.train_evaluate_extra_trees_with_best_params,
+                ExtraTreesClassifier,
+                {
+                    'n_estimators': 5,
+                    'max_depth': None,
+                    'min_samples_leaf': 1,
+                    'min_samples_split': 2,
+                    'max_features': None,
+                    'bootstrap': True,
+                    'class_weight': None,
+                    'criterion': 'gini',
+                    'max_samples': 0.8,
+                    'random_state': 73,
+                    'n_jobs': -1,
+                },
+            ),
+            (
+                'hist_gradient_boosting',
+                nodes.train_evaluate_hist_gradient_boosting_with_best_params,
+                HistGradientBoostingClassifier,
+                {
+                    'max_iter': 5,
+                    'learning_rate': 0.1,
+                    'max_leaf_nodes': 5,
+                    'max_depth': None,
+                    'min_samples_leaf': 1,
+                    'l2_regularization': 0.0,
+                    'max_bins': 255,
+                    'early_stopping': False,
+                    'class_weight': None,
+                    'random_state': 73,
+                },
+            ),
+            (
+                'xgboost',
+                nodes.train_evaluate_xgboost_with_best_params,
+                XGBClassifier,
+                {
+                    'n_estimators': 5,
+                    'max_depth': 2,
+                    'learning_rate': 0.1,
+                    'subsample': 1.0,
+                    'colsample_bytree': 1.0,
+                    'min_child_weight': 1,
+                    'gamma': 0.0,
+                    'reg_alpha': 0.0,
+                    'reg_lambda': 1.0,
+                    'objective': 'binary:logistic',
+                    'eval_metric': 'logloss',
+                    'tree_method': 'hist',
+                    'random_state': 73,
+                    'n_jobs': -1,
+                    'verbosity': 0,
+                },
+            ),
+        ]
+
+        for model_name, train_function, estimator_type, best_params in cases:
+            with self.subTest(model_name=model_name):
+                model, test_metrics, matrix, selected_features = train_function(
+                    X_train,
+                    X_test,
+                    y_train,
+                    y_test,
+                    _preprocessing_parameters(),
+                    _modeling_parameters(),
+                    best_params,
+                )
+
+                self.assertIsInstance(model, model_bundle.ModelBundle)
+                self.assertIsInstance(model.estimator, estimator_type)
+                self.assertEqual(model.estimator.random_state, 73)
+                self.assertEqual(test_metrics.shape, (1, 6))
+                self.assertEqual(matrix.shape, (2, 2))
+                self.assertGreaterEqual(len(selected_features), 1)
 
     def test_cross_validation_fails_when_n_splits_exceeds_smallest_class_count(
         self,
@@ -190,6 +307,48 @@ class ModelingNodeTests(unittest.TestCase):
         figure = nodes.create_test_confusion_matrix_plot(matrix)
 
         self.assertIsInstance(figure, Figure)
+
+    def test_build_model_comparison_ranks_by_cv_f1_and_keeps_test_metrics(
+        self,
+    ) -> None:
+        cv_frames = {
+            'logistic_regression': _cv_metrics_frame(0.50),
+            'random_forest': _cv_metrics_frame(0.60),
+            'extra_trees': _cv_metrics_frame(0.90),
+            'hist_gradient_boosting': _cv_metrics_frame(0.70),
+            'xgboost': _cv_metrics_frame(0.80),
+        }
+        test_frames = {
+            model_name: _test_metrics_frame(0.40 + index / 10)
+            for index, model_name in enumerate(cv_frames)
+        }
+
+        comparison = nodes.build_model_comparison(
+            cv_frames['logistic_regression'],
+            test_frames['logistic_regression'],
+            cv_frames['random_forest'],
+            test_frames['random_forest'],
+            cv_frames['extra_trees'],
+            test_frames['extra_trees'],
+            cv_frames['hist_gradient_boosting'],
+            test_frames['hist_gradient_boosting'],
+            cv_frames['xgboost'],
+            test_frames['xgboost'],
+        )
+
+        self.assertListEqual(
+            comparison['model_name'].tolist(),
+            [
+                'extra_trees',
+                'xgboost',
+                'hist_gradient_boosting',
+                'random_forest',
+                'logistic_regression',
+            ],
+        )
+        self.assertListEqual(comparison['development_rank'].tolist(), [1, 2, 3, 4, 5])
+        self.assertIn('cv_mean_precision', comparison.columns)
+        self.assertIn('test_recall', comparison.columns)
 
     def test_log_model_to_mlflow_returns_run_info(self) -> None:
         X_train, X_test, y_train, y_test = _modeling_artifacts()
@@ -324,11 +483,43 @@ def _preprocessing_parameters() -> dict[str, object]:
             'step': 1,
             'cv_folds': 2,
             'scoring': 'roc_auc',
-            'n_jobs': -1,
+            'n_jobs': 1,
             'logistic_max_iter': 1000,
             'random_state': 73,
         },
     }
+
+
+def _cv_metrics_frame(f1_value: float) -> pd.DataFrame:
+    """Return one valid CV summary metrics frame."""
+    row = {}
+    for metric_name in [
+        'accuracy',
+        'precision',
+        'recall',
+        'f1',
+        'f1_weighted',
+        'roc_auc',
+    ]:
+        row[f'cv_mean_{metric_name}'] = f1_value
+        row[f'cv_std_{metric_name}'] = 0.01
+    return pd.DataFrame([row])
+
+
+def _test_metrics_frame(metric_value: float) -> pd.DataFrame:
+    """Return one valid final holdout metrics frame."""
+    return pd.DataFrame(
+        [
+            {
+                'accuracy': metric_value,
+                'precision': metric_value,
+                'recall': metric_value,
+                'f1': metric_value,
+                'f1_weighted': metric_value,
+                'roc_auc': metric_value,
+            }
+        ]
+    )
 
 
 def _modeling_parameters() -> dict[str, object]:
@@ -348,9 +539,56 @@ def _modeling_parameters() -> dict[str, object]:
             'n_estimators': 10,
             'max_depth': None,
             'min_samples_leaf': 1,
+            'min_samples_split': 2,
+            'max_features': None,
+            'bootstrap': True,
+            'criterion': 'gini',
+            'max_samples': None,
             'random_state': 73,
             'n_jobs': -1,
             'class_weight': None,
+        },
+        'extra_trees': {
+            'n_estimators': 10,
+            'max_depth': None,
+            'min_samples_leaf': 1,
+            'min_samples_split': 2,
+            'max_features': None,
+            'bootstrap': True,
+            'class_weight': None,
+            'criterion': 'gini',
+            'max_samples': None,
+            'random_state': 73,
+            'n_jobs': -1,
+        },
+        'hist_gradient_boosting': {
+            'max_iter': 10,
+            'learning_rate': 0.1,
+            'max_leaf_nodes': 5,
+            'max_depth': None,
+            'min_samples_leaf': 1,
+            'l2_regularization': 0.0,
+            'max_bins': 255,
+            'early_stopping': False,
+            'class_weight': None,
+            'random_state': 73,
+        },
+        'xgboost': {
+            'n_estimators': 5,
+            'max_depth': 2,
+            'learning_rate': 0.1,
+            'subsample': 1.0,
+            'colsample_bytree': 1.0,
+            'min_child_weight': 1,
+            'gamma': 0.0,
+            'reg_alpha': 0.0,
+            'reg_lambda': 1.0,
+            'objective': 'binary:logistic',
+            'eval_metric': 'logloss',
+            'tree_method': 'hist',
+            'random_state': 73,
+            'n_jobs': -1,
+            'verbosity': 0,
         },
         'random_forest_optimization': {
             'enabled': True,
@@ -369,11 +607,69 @@ def _modeling_parameters() -> dict[str, object]:
                 'max_samples': {'type': 'float', 'low': 0.6, 'high': 1.0},
             },
         },
+        'extra_trees_optimization': {
+            'enabled': True,
+            'n_trials': 2,
+            'sampler': 'tpe',
+            'random_state': 73,
+            'objective_metric': 'f1',
+            'search_space': {
+                'n_estimators': {'type': 'categorical', 'choices': [5, 10]},
+                'max_depth': {'type': 'categorical', 'choices': [None, 3]},
+                'min_samples_leaf': {'type': 'categorical', 'choices': [1, 2]},
+                'min_samples_split': {'type': 'categorical', 'choices': [2, 4]},
+                'max_features': {'type': 'categorical', 'choices': [None, 'sqrt']},
+                'bootstrap': {'type': 'categorical', 'choices': [True]},
+                'class_weight': {'type': 'categorical', 'choices': [None, 'balanced']},
+                'criterion': {'type': 'categorical', 'choices': ['gini']},
+                'max_samples': {'type': 'float', 'low': 0.6, 'high': 1.0},
+            },
+        },
+        'hist_gradient_boosting_optimization': {
+            'enabled': True,
+            'n_trials': 2,
+            'sampler': 'tpe',
+            'random_state': 73,
+            'objective_metric': 'f1',
+            'search_space': {
+                'max_iter': {'type': 'categorical', 'choices': [5, 10]},
+                'learning_rate': {'type': 'categorical', 'choices': [0.1, 0.2]},
+                'max_leaf_nodes': {'type': 'categorical', 'choices': [5, 10]},
+                'max_depth': {'type': 'categorical', 'choices': [None, 3]},
+                'min_samples_leaf': {'type': 'categorical', 'choices': [1, 2]},
+                'l2_regularization': {'type': 'categorical', 'choices': [0.0, 0.1]},
+                'max_bins': {'type': 'categorical', 'choices': [255]},
+                'class_weight': {'type': 'categorical', 'choices': [None]},
+            },
+        },
+        'xgboost_optimization': {
+            'enabled': True,
+            'n_trials': 2,
+            'sampler': 'tpe',
+            'random_state': 73,
+            'objective_metric': 'f1',
+            'search_space': {
+                'n_estimators': {'type': 'categorical', 'choices': [3, 5]},
+                'max_depth': {'type': 'categorical', 'choices': [2, 3]},
+                'learning_rate': {'type': 'categorical', 'choices': [0.1, 0.2]},
+                'subsample': {'type': 'categorical', 'choices': [1.0]},
+                'colsample_bytree': {'type': 'categorical', 'choices': [1.0]},
+                'min_child_weight': {'type': 'categorical', 'choices': [1]},
+                'gamma': {'type': 'categorical', 'choices': [0.0]},
+                'reg_alpha': {'type': 'categorical', 'choices': [0.0]},
+                'reg_lambda': {'type': 'categorical', 'choices': [1.0]},
+            },
+        },
         'mlflow': {
             'tracking_uri': 'mlruns',
             'experiment_name': 'water_potability_modeling',
             'run_name': 'logistic_regression_baseline',
             'random_forest_run_name': 'random_forest_nonlinear_probe',
+            'extra_trees_run_name': 'extra_trees_nonlinear_probe',
+            'hist_gradient_boosting_run_name': (
+                'hist_gradient_boosting_nonlinear_probe'
+            ),
+            'xgboost_run_name': 'xgboost_nonlinear_probe',
         },
     }
 

@@ -6,13 +6,15 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-CONTEXT.md
 
 # Local data is downloaded and generated outside Git.
 data/
 
-# Local MLflow tracking state
+# Local MLflow tracking state. Force-add or archive mlruns/ only for a
+# deliberate read-only MLflow snapshot export.
 mlruns/
+mlflow.db-shm
+mlflow.db-wal
 
 # Generated report exports. Markdown reports under reports/ are tracked.
 reports/**/*.html
@@ -29,3 +31,6 @@ reports/**/figure-latex/
 
 # Kedro Viz local state
 .viz/
+
+# Local one-off helper scripts stay outside the committed repository tree.
+scripts/

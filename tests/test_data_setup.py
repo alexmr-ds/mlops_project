@@ -160,6 +160,42 @@ class MainCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertIn("Error: boom", stderr.getvalue())
 
+    def test_main_reports_clean_mlflow_audit(self) -> None:
+        stdout = io.StringIO()
+        audit_summary = main.mlflow_secret_audit.AuditSummary(findings=[])
+        with mock.patch.object(
+            main.mlflow_secret_audit,
+            "audit_mlflow_stores",
+            return_value=audit_summary,
+        ) as mock_audit:
+            with mock.patch("sys.stdout", stdout):
+                exit_code = main.main(["audit-mlflow-secrets"])
+
+        mock_audit.assert_called_once()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Suspicious MLflow locations: 0", stdout.getvalue())
+
+    def test_main_returns_nonzero_when_mlflow_audit_finds_matches(self) -> None:
+        stdout = io.StringIO()
+        audit_summary = main.mlflow_secret_audit.AuditSummary(
+            findings=[
+                main.mlflow_secret_audit.AuditFinding(
+                    location="params.value[rowid=1]",
+                    category="sqlite_text_match",
+                )
+            ]
+        )
+        with mock.patch.object(
+            main.mlflow_secret_audit,
+            "audit_mlflow_stores",
+            return_value=audit_summary,
+        ):
+            with mock.patch("sys.stdout", stdout):
+                exit_code = main.main(["audit-mlflow-secrets"])
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("sqlite_text_match: params.value[rowid=1]", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

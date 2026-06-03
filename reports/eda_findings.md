@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document summarises the key observations from `notebooks/EDA.ipynb` and explains how they inform the preprocessing pipeline. The notebook is kept as an exploratory reference and is not pushed to the repository due to output size constraints from CI/CD actions.
+This document summarises the key observations from `notebooks/EDA.ipynb` and explains how they inform the preprocessing pipeline. The notebook is kept in the repository as a tracked exploratory reference.
 
 ---
 

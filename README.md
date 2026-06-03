@@ -1,6 +1,6 @@
 # MLOps Project
 
-Current scope: Kedro-based preprocessing and registered per-model modeling for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified train/test splitting, split-wise deterministic feature engineering, fold-local learned preprocessing, fold-local model-ready feature validation, k-fold cross-validation, LogisticRegression baseline training, Optuna-optimized tree-based model comparison across RandomForest, ExtraTrees, HistGradientBoosting, and XGBoost, final holdout test evaluation, local MLflow tracking with logged pyfunc models, prediction-ready persisted model bundles, and persisted reporting artifacts, with exploratory analysis still available under `notebooks/`.
+Current scope: Kedro-based preprocessing and registered per-model modeling for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified train/test splitting, split-wise deterministic feature engineering, fold-local learned preprocessing, fold-local model-ready validation, k-fold cross-validation, LogisticRegression baseline training, Optuna-optimized tree-based model comparison across RandomForest, ExtraTrees, HistGradientBoosting, and XGBoost, final holdout test evaluation, local MLflow tracking with logged pyfunc models, MLflow secret-audit support before snapshot sharing, a read-only MLflow snapshot for sharing existing runs, prediction-ready persisted model bundles, and persisted reporting artifacts, with exploratory analysis still available under `notebooks/`.
 
 ## Repository Tree
 
@@ -9,7 +9,8 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 ├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, local data, and MLflow runs.
 ├── CONTEXT.md                                     - Project language for raw data validation, learned preprocessing, model-ready validation, model evaluation, and tuning boundaries.
 ├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
-├── main.py                                        - CLI entrypoint for local data bootstrap tasks.
+├── main.py                                        - CLI entrypoint for local data bootstrap and MLflow secret-audit tasks.
+├── mlflow.db                                      - Committed read-only SQLite metadata snapshot migrated from existing local MLflow runs.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
 ├── uv.lock                                        - Locked dependency resolution for `uv`.
 ├── conf/
@@ -29,11 +30,12 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 │   └── eda_findings.md                            - Tracked written summary of the exploratory analysis and preprocessing rationale.
 ├── src/
 │   ├── __init__.py                                - Package marker for shared source code.
-│   ├── project_paths.py                           - Repo-root and data-path helpers used by notebooks and scripts.
+│   ├── project_paths.py                           - Repo-root and data-path helpers used by notebooks and local tooling.
 │   └── mlops_project/
 │       ├── __init__.py                            - Kedro project package marker.
 │       ├── data_setup.py                          - Interactive Kaggle credential bootstrap and dataset download helper.
 │       ├── datasets.py                            - Local Kedro dataset implementations for CSV, pickle, and matplotlib figure persistence.
+│       ├── mlflow_secret_audit.py                 - Secret-like content audit helpers for local MLflow file and SQLite stores.
 │       ├── modeling/
 │       │   ├── __init__.py                        - Reusable modeling component package marker.
 │       │   ├── evaluation.py                      - Model construction, fold-local cross-validation, final holdout evaluation, metrics, and artifact validation helpers.
@@ -58,6 +60,7 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 └── tests/
     ├── __init__.py                                - Test package marker.
     ├── test_data_setup.py                         - Unit tests for interactive credential bootstrap, dataset download, and CLI behavior.
+    ├── test_mlflow_secret_audit.py                - Unit tests for MLflow secret scanning across `mlruns/` files and `mlflow.db`.
     └── pipelines/
         ├── __init__.py                            - Pipeline test package marker.
         ├── modeling/
@@ -88,7 +91,7 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 
 `data/` is intentionally local-only and ignored by Git. That includes the downloaded raw CSV, generated pipeline outputs under `data/03_primary/`, and reporting artifacts under `data/08_reporting/`.
 
-`mlruns/` is also local-only and ignored by Git. It stores MLflow runs for local development.
+`mlruns/` stores MLflow artifacts for local development and for the read-only snapshot. It is ignored by Git for normal development, while `mlflow.db` is committed as a shareable metadata snapshot. Distribute or archive `mlruns/` separately whenever someone needs the underlying model files and artifacts referenced by the snapshot.
 
 `reports/` stores tracked human-readable Markdown reports. Generated local pipeline reporting artifacts remain under ignored `data/08_reporting/`.
 
@@ -126,7 +129,7 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 - Primary development metric: `cv_mean_f1`
 - Additional metrics: accuracy, precision, recall, F1, weighted F1, ROC AUC, and confusion matrix for the final test split
 - Model comparison: aggregate `modeling` writes `model_comparison.csv`, ranked by `cv_mean_f1` and including CV and final holdout accuracy, precision, recall, F1, weighted F1, and ROC AUC
-- MLflow tracking: local `mlruns/` with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables
+- MLflow tracking: local `mlruns/` with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables. `mlflow.db` is a committed point-in-time read-only metadata snapshot for sharing existing runs, not the backend used for future local training runs.
 - Registered model pipelines: `modeling_logistic_regression`, `modeling_random_forest`, `modeling_extra_trees`, `modeling_hist_gradient_boosting`, `modeling_xgboost`, and aggregate `modeling`
 - Persisted modeling outputs:
   - `logistic_regression_model.pkl`: prediction-ready baseline bundle containing fitted learned preprocessing and the trained LogisticRegression estimator
@@ -157,8 +160,37 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 9. Run only XGBoost with `uv run kedro run --pipeline modeling_xgboost`.
 10. Inspect persisted local outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
 11. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns`.
+12. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
 
 The per-model modeling pipelines expect the final preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale.
+
+## MLflow Snapshot Sharing
+
+`mlflow.db` is a committed read-only snapshot of existing MLflow run metadata. It contains experiments, runs, params, metrics, tags, and logged-model records. It does not contain model files, plots, CSVs, or pyfunc artifacts; those remain under `mlruns/`.
+
+The current snapshot was created from the local file store with:
+
+```bash
+uv run mlflow migrate-filestore \
+  --source ./mlruns \
+  --target sqlite:///./mlflow.db
+```
+
+The target database must be empty when refreshing the snapshot. If MLflow reports duplicate metric rows during migration, migrate from a temporary de-duplicated copy of `mlruns/` and leave the working `mlruns/` directory unchanged.
+
+Before migrating or committing a refreshed snapshot, run `uv run python main.py audit-mlflow-secrets` and confirm it reports zero suspicious locations.
+
+To inspect the snapshot on another machine, make sure both `mlflow.db` and `mlruns/` are present. The server command below is sufficient only when the artifact URIs stored inside `mlflow.db` already resolve under that machine's local `mlruns/` directory. If the copied database still points at a different checkout, regenerate the snapshot locally from `mlruns/` or rewrite the file-based `mlruns` URIs in a local copy of `mlflow.db` before starting the server.
+
+```bash
+uv run mlflow server \
+  --backend-store-uri sqlite:///mlflow.db \
+  --default-artifact-root ./mlruns
+```
+
+Open the MLflow UI URL printed by the server and inspect the `water_potability_modeling` experiment. This repository does not track a rebasing helper under `scripts/`; treat any URI-rewrite helper as local-only tooling. If the installed MLflow version requires `mlflow ui` instead of `mlflow server` for local inspection, use the same `--backend-store-uri sqlite:///mlflow.db` value.
+
+This snapshot is not a multi-user writable backend. Continue generating new local runs through the configured `mlruns` tracking URI; refresh the snapshot only when you want to export another point-in-time view.
 
 ## Data Convention
 

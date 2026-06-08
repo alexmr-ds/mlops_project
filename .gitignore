@@ -12,7 +12,6 @@ data/
 
 # Local MLflow tracking state. Force-add or archive mlruns/ only for a
 # deliberate read-only MLflow snapshot export.
-mlruns/
 mlflow.db-shm
 mlflow.db-wal
 

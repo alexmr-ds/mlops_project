@@ -1,0 +1,10 @@
+artifact_location: /Users/alexandre/Documents/mlops_project/mlruns/700730195876629825/models/m-96f0e67da0f7452fab071c65d8b97c5a/artifacts
+creation_timestamp: 1780476184894
+experiment_id: '700730195876629825'
+last_updated_timestamp: 1780476185030
+model_id: m-96f0e67da0f7452fab071c65d8b97c5a
+model_type: null
+name: extra_trees_model
+source_run_id: d17fb810242b4f37994fec64df7347c6
+status: 2
+status_message: null

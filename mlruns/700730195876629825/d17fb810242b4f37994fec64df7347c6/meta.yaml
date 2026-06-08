@@ -1,0 +1,14 @@
+artifact_uri: /Users/alexandre/Documents/mlops_project/mlruns/700730195876629825/d17fb810242b4f37994fec64df7347c6/artifacts
+end_time: 1780476185040
+entry_point_name: ''
+experiment_id: '700730195876629825'
+lifecycle_stage: active
+run_id: d17fb810242b4f37994fec64df7347c6
+run_name: extra_trees_nonlinear_probe
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1780476184849
+status: 3
+tags: []
+user_id: alexandre

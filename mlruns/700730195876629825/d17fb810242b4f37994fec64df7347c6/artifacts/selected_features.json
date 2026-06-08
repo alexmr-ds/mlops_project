@@ -1,0 +1,21 @@
+[
+  "ph",
+  "Hardness",
+  "Solids",
+  "Chloramines",
+  "Conductivity",
+  "Organic_carbon",
+  "Turbidity",
+  "conductivity_solids_ratio",
+  "turbidity_solids_ratio",
+  "hardness_conductivity_ratio",
+  "hardness_solids_ratio",
+  "chloramines_ph_interaction",
+  "organic_trihalo_interaction",
+  "turbidity_organic_interaction",
+  "trihalo_formation_risk",
+  "dbp_precursor_load",
+  "solids_sulfate_diff",
+  "expanded_risk_score",
+  "ph_safe_range"
+]

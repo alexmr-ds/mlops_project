@@ -1,0 +1,12 @@
+{
+  "max_iter": 400,
+  "learning_rate": 0.06246092699192399,
+  "max_leaf_nodes": 31,
+  "max_depth": 10,
+  "min_samples_leaf": 22,
+  "l2_regularization": 0.4040831743925639,
+  "max_bins": 127,
+  "early_stopping": false,
+  "class_weight": null,
+  "random_state": 73
+}

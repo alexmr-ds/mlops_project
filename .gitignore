@@ -7,9 +7,6 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
-# Local data is downloaded and generated outside Git.
-data/
-
 # Local MLflow tracking state. Force-add or archive mlruns/ only for a
 # deliberate read-only MLflow snapshot export.
 mlflow.db-shm

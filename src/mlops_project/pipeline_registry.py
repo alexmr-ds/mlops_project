@@ -2,7 +2,7 @@
 
 from kedro.pipeline import Pipeline
 
-from .pipelines import modeling, preprocessing
+from .pipelines import data_drift, modeling, preprocessing
 
 
 def register_pipelines() -> dict[str, Pipeline]:
@@ -14,6 +14,7 @@ def register_pipelines() -> dict[str, Pipeline]:
     hist_gradient_boosting_pipeline = modeling.create_hist_gradient_boosting_pipeline()
     xgboost_pipeline = modeling.create_xgboost_pipeline()
     modeling_pipeline = modeling.create_pipeline()
+    data_drift_pipeline = data_drift.create_pipeline()
     return {
         "preprocessing": preprocessing_pipeline,
         "modeling_logistic_regression": logistic_regression_pipeline,
@@ -22,5 +23,6 @@ def register_pipelines() -> dict[str, Pipeline]:
         "modeling_hist_gradient_boosting": hist_gradient_boosting_pipeline,
         "modeling_xgboost": xgboost_pipeline,
         "modeling": modeling_pipeline,
+        "data_drift": data_drift_pipeline,
         "__default__": preprocessing_pipeline + modeling_pipeline,
     }

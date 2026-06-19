@@ -23,6 +23,7 @@ def create_pipeline(**kwargs: object) -> Pipeline:
         + create_hist_gradient_boosting_pipeline()
         + create_xgboost_pipeline()
         + create_model_comparison_pipeline()
+        + create_random_forest_shap_pipeline()
     )
 
 
@@ -189,6 +190,21 @@ def create_tuned_model_pipeline(
                 ],
                 outputs=f"{model_name}_mlflow_run_info",
                 name=f"log_{model_name}_to_mlflow_node",
+            ),
+        ]
+    )
+
+
+def create_random_forest_shap_pipeline(**kwargs: object) -> Pipeline:
+    """Create the SHAP explainability pipeline for the best-performing Random Forest."""
+    del kwargs
+    return pipeline(
+        [
+            node(
+                func=nodes.compute_random_forest_shap_values,
+                inputs=["random_forest_model", "X_test"],
+                outputs=["random_forest_shap_summary", "random_forest_shap_summary_plot"],
+                name="compute_random_forest_shap_values_node",
             ),
         ]
     )

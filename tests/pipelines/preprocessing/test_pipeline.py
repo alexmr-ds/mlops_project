@@ -49,6 +49,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn('modeling_xgboost', pipelines)
         self.assertIn('modeling', pipelines)
         self.assertIn('__default__', pipelines)
+        self.assertIn('data_drift', pipelines)
         self.assertEqual(
             len(pipelines['modeling'].nodes),
             len(pipelines['modeling_logistic_regression'].nodes)
@@ -56,7 +57,7 @@ class PipelineTests(unittest.TestCase):
             + len(pipelines['modeling_extra_trees'].nodes)
             + len(pipelines['modeling_hist_gradient_boosting'].nodes)
             + len(pipelines['modeling_xgboost'].nodes)
-            + 1,
+            + 2,  # model_comparison node + SHAP node
         )
         self.assertGreater(
             len(pipelines['__default__'].nodes),

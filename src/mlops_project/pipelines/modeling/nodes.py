@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 
 from mlops_project.modeling import evaluation as modeling_evaluation
 from mlops_project.modeling import experiment_tracking as modeling_experiment_tracking
+from mlops_project.modeling import explainability as modeling_explainability
 from mlops_project.modeling import optimization as modeling_optimization
 
 CLASS_LABELS = modeling_evaluation.CLASS_LABELS
@@ -552,6 +553,23 @@ def build_model_comparison(
     )
     comparison.insert(0, "development_rank", range(1, len(comparison) + 1))
     return comparison.reset_index(drop=True)
+
+
+def compute_random_forest_shap_values(
+    model: Any,
+    X_test: pd.DataFrame,
+) -> tuple[pd.DataFrame, Figure]:
+    """Compute SHAP values for the fitted random forest and produce a summary plot.
+
+    Returns the per-feature summary DataFrame and the bar-chart Figure so both
+    can be persisted independently through the Kedro catalog.
+    """
+    shap_values, shap_summary = modeling_explainability.compute_shap_values(
+        model_bundle=model,
+        X_test=X_test,
+    )
+    shap_plot = modeling_explainability.create_shap_summary_plot(shap_values, shap_summary)
+    return shap_summary, shap_plot
 
 
 def build_model_comparison_row(

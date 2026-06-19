@@ -1,0 +1,14 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    # Mount the models directory read-only so the container always uses the
+    # latest trained model without needing a full image rebuild.
+    volumes:
+      - ./data/06_models:/app/data/06_models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

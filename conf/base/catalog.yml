@@ -213,3 +213,15 @@ hist_gradient_boosting_mlflow_run_info:
 xgboost_mlflow_run_info:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/08_reporting/xgboost_mlflow_run_info.csv
+
+random_forest_shap_summary:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/random_forest_shap_summary.csv
+
+random_forest_shap_summary_plot:
+  type: mlops_project.datasets.MatplotlibFigureDataset
+  filepath: data/08_reporting/random_forest_shap_summary_plot.png
+
+drift_report:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/drift_report.csv

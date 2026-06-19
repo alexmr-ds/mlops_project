@@ -45,6 +45,7 @@ XGBOOST_NODE_NAMES = [
     'log_xgboost_to_mlflow_node',
 ]
 COMPARISON_NODE_NAMES = ['build_model_comparison_node']
+SHAP_NODE_NAMES = ['compute_random_forest_shap_values_node']
 
 
 class ModelingPipelineTests(unittest.TestCase):
@@ -214,6 +215,7 @@ class ModelingPipelineTests(unittest.TestCase):
                 + HIST_GRADIENT_BOOSTING_NODE_NAMES
                 + XGBOOST_NODE_NAMES
                 + COMPARISON_NODE_NAMES
+                + SHAP_NODE_NAMES
             ),
         )
         self.assertListEqual(

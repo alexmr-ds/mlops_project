@@ -290,3 +290,7 @@ modeling:
     extra_trees_run_name: extra_trees_nonlinear_probe
     hist_gradient_boosting_run_name: hist_gradient_boosting_nonlinear_probe
     xgboost_run_name: xgboost_nonlinear_probe
+
+data_drift:
+  # p-value threshold for the two-sample KS test; features with p < threshold are flagged as drifted
+  significance_threshold: 0.05

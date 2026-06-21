@@ -1,14 +1,18 @@
 # MLOps Project
 
-Current scope: Kedro-based preprocessing and registered per-model modeling for the water potability dataset, including local Kaggle data download, fail-fast Great Expectations raw data validation, stratified train/test splitting, split-wise deterministic feature engineering, fold-local learned preprocessing, fold-local model-ready validation, k-fold cross-validation, LogisticRegression baseline training, Optuna-optimized tree-based model comparison across RandomForest, ExtraTrees, HistGradientBoosting, and XGBoost, final holdout test evaluation, local MLflow tracking with logged pyfunc models, MLflow secret-audit support before snapshot sharing, a read-only MLflow snapshot for sharing existing runs, prediction-ready persisted model bundles, and persisted reporting artifacts, with exploratory analysis still available under `notebooks/`.
+Current scope: an end-to-end Kedro MLOps proof of concept for the water potability dataset. It includes local Kaggle data setup, fail-fast Great Expectations validation, deterministic feature engineering, leakage-safe learned preprocessing, cross-validated LogisticRegression and Optuna-tuned tree-model comparison, final holdout evaluation, MLflow experiment tracking and snapshot sharing, Random Forest SHAP explainability, KS-test feature drift reporting, prediction-ready model bundles, and FastAPI serving through local or Docker execution. Exploratory analysis remains available under `notebooks/`.
 
 ## Repository Tree
 
 ```text
 .
-├── .gitignore                                     - Git ignore rules for virtual environments, caches, notebook checkpoints, local data, and MLflow runs.
+├── .gitignore                                     - Ignore rules for local environments, caches, MLflow SQLite sidecars, report exports, Kedro Viz state, and helper scripts.
+├── .python-version                                - Python version selected for local tooling.
 ├── CONTEXT.md                                     - Project language for raw data validation, learned preprocessing, model-ready validation, model evaluation, and tuning boundaries.
+├── Dockerfile                                     - Multi-stage image definition for the FastAPI prediction service.
+├── MLOps_project.md                               - Original project brief, deliverables, and reference structure.
 ├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
+├── docker-compose.yml                             - Local container configuration, model mount, port mapping, and API health check.
 ├── main.py                                        - CLI entrypoint for local data bootstrap and MLflow secret-audit tasks.
 ├── mlflow.db                                      - Committed read-only SQLite metadata snapshot migrated from existing local MLflow runs.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
@@ -18,16 +22,23 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 │   │   ├── catalog.yml                            - Kedro dataset catalog for raw input, train/test artifacts, model artifacts, MLflow run metadata, and reporting outputs.
 │   │   └── parameters.yml                         - Runtime preprocessing, modeling, and MLflow parameters.
 │   └── local/                                     - Local Kedro environment directory required by the default config loader.
+├── data/
+│   ├── raw/                                       - Water potability source CSV used by preprocessing.
+│   ├── 03_primary/                                - Persisted engineered train/test features and labels.
+│   ├── 06_models/                                 - Persisted prediction-ready model bundles, selected features, and tuned parameters.
+│   └── 08_reporting/                              - Persisted metrics, plots, SHAP summaries, drift results, and MLflow run metadata.
 ├── docs/
 │   └── adr/
 │       ├── 0001-random-forest-optuna-optimization.md - Architecture decision record for Optuna-based RandomForest tuning.
 │       └── 0002-generalized-optuna-tree-model-comparison.md - Architecture decision record for shared tree-based model tuning and comparison.
+├── mlruns/                                        - Committed point-in-time MLflow file-store snapshot containing run and model artifacts.
 ├── notebooks/
 │   ├── EDA.ipynb                                  - Exploratory notebook that reads the locally prepared dataset and inspects distributions, missingness, and class balance.
 │   └── images/
 │       └── distribution_numerical_features.png    - Exported figure of the numerical feature distributions used by the EDA report.
 ├── reports/
-│   └── eda_findings.md                            - Tracked written summary of the exploratory analysis and preprocessing rationale.
+│   ├── eda_findings.md                            - Tracked written summary of the exploratory analysis and preprocessing rationale.
+│   └── report.md                                  - Final project report covering results, explainability, drift, serving, and production considerations.
 ├── src/
 │   ├── __init__.py                                - Package marker for shared source code.
 │   ├── project_paths.py                           - Repo-root and data-path helpers used by notebooks and local tooling.
@@ -39,6 +50,7 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 │       ├── modeling/
 │       │   ├── __init__.py                        - Reusable modeling component package marker.
 │       │   ├── evaluation.py                      - Model construction, fold-local cross-validation, final holdout evaluation, metrics, and artifact validation helpers.
+│       │   ├── explainability.py                   - SHAP computation and summary plotting for the selected Random Forest bundle.
 │       │   ├── experiment_tracking.py             - MLflow logging for fitted model bundles, metrics, confusion matrices, selected features, and Optuna artifacts.
 │       │   ├── model_bundle.py                    - Prediction-ready persisted model bundle that applies fitted learned preprocessing before estimator prediction.
 │       │   ├── optimization.py                    - Shared Optuna tuning, search-space sampling, selected-parameter resolution, and trial artifact builders for tree-based models.
@@ -46,25 +58,36 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 │       │   └── validation.py                      - Great Expectations model-ready feature contract and label alignment checks after learned preprocessing.
 │       ├── pipeline_registry.py                   - Registers preprocessing, aggregate modeling, per-model modeling, and default Kedro pipelines.
 │       ├── settings.py                            - Project settings entrypoint for Kedro.
-│       └── pipelines/
+│       ├── pipelines/
 │           ├── __init__.py                        - Pipeline namespace package.
+│           ├── data_drift/
+│           │   ├── __init__.py                    - Re-exports the data drift pipeline factory.
+│           │   ├── nodes.py                       - Two-sample KS feature-drift calculations and report construction.
+│           │   └── pipeline.py                    - Kedro node graph for comparing train and test feature distributions.
 │           ├── modeling/
 │           │   ├── __init__.py                    - Re-exports the modeling pipeline factory.
-│           │   ├── nodes.py                       - Kedro adapters for modeling workflows and final confusion-matrix plot creation.
+│           │   ├── nodes.py                       - Kedro adapters for modeling, comparison, MLflow, confusion-matrix, and SHAP workflows.
 │           │   └── pipeline.py                    - Kedro node graphs for aggregate and per-model modeling workflows.
 │           └── preprocessing/
 │               ├── __init__.py                    - Re-exports the preprocessing pipeline factory.
 │               ├── nodes.py                       - Split and deterministic feature-engineering node implementations.
 │               ├── pipeline.py                    - Kedro node graph for the preprocessing workflow.
 │               └── validation.py                  - Great Expectations raw-data contract and engineered train/test modeling-input checks.
+│       └── serving/
+│           ├── __init__.py                        - Prediction-service package marker.
+│           └── app.py                             - FastAPI application exposing health and Random Forest prediction endpoints.
 └── tests/
     ├── __init__.py                                - Test package marker.
     ├── test_data_setup.py                         - Unit tests for interactive credential bootstrap, dataset download, and CLI behavior.
     ├── test_mlflow_secret_audit.py                - Unit tests for MLflow secret scanning across `mlruns/` files and `mlflow.db`.
     └── pipelines/
         ├── __init__.py                            - Pipeline test package marker.
+        ├── data_drift/
+        │   ├── __init__.py                        - Data drift test package marker.
+        │   └── test_nodes.py                      - Unit tests for KS statistics, thresholds, report shape, and drift flags.
         ├── modeling/
         │   ├── __init__.py                        - Modeling test package marker.
+        │   ├── test_explainability.py             - Unit tests for SHAP output shape, ordering, values, and plots.
         │   ├── test_nodes.py                      - Unit tests for cross-validated LogisticRegression training, tuned tree-based models, model bundles, final testing, plotting, comparison reports, and MLflow logging behavior.
         │   ├── test_optimization.py               - Unit tests for shared tree-based model optimization helper behavior.
         │   ├── test_pipeline.py                   - Unit tests for modeling pipeline assembly.
@@ -89,11 +112,11 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
    - set file permissions to `600`
 4. The script then downloads `adityakadiwal/water-potability` into local `data/raw/`.
 
-`data/` is intentionally local-only and ignored by Git. That includes the downloaded raw CSV, generated pipeline outputs under `data/03_primary/`, and reporting artifacts under `data/08_reporting/`.
+The repository currently includes a committed point-in-time snapshot of the raw dataset and generated artifacts under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`. Pipeline runs may replace these files or add new generated outputs; review those changes before committing another snapshot.
 
-`mlruns/` stores MLflow artifacts for local development and for the read-only snapshot. It is ignored by Git for normal development, while `mlflow.db` is committed as a shareable metadata snapshot. Distribute or archive `mlruns/` separately whenever someone needs the underlying model files and artifacts referenced by the snapshot.
+`mlruns/` and `mlflow.db` are both committed as a shareable point-in-time MLflow snapshot. The file store contains model files and run artifacts, while the SQLite database contains migrated metadata. Future local training also writes to `mlruns/`, so audit and review changes before refreshing the shared snapshot.
 
-`reports/` stores tracked human-readable Markdown reports. Generated local pipeline reporting artifacts remain under ignored `data/08_reporting/`.
+`reports/` stores tracked human-readable Markdown reports. `.gitignore` covers local virtual environments, Python and test caches, notebook checkpoints, MLflow SQLite sidecars, generated report exports, Kedro Viz state, and local helper scripts; it does not currently ignore `data/` or `mlruns/`.
 
 ## Preprocessing Behavior
 
@@ -130,7 +153,7 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 - Additional metrics: accuracy, precision, recall, F1, weighted F1, ROC AUC, and confusion matrix for the final test split
 - Model comparison: aggregate `modeling` writes `model_comparison.csv`, ranked by `cv_mean_f1` and including CV and final holdout accuracy, precision, recall, F1, weighted F1, and ROC AUC
 - MLflow tracking: local `mlruns/` with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables. `mlflow.db` is a committed point-in-time read-only metadata snapshot for sharing existing runs, not the backend used for future local training runs.
-- Registered model pipelines: `modeling_logistic_regression`, `modeling_random_forest`, `modeling_extra_trees`, `modeling_hist_gradient_boosting`, `modeling_xgboost`, and aggregate `modeling`
+- Registered pipelines: `preprocessing`, `modeling_logistic_regression`, `modeling_random_forest`, `modeling_extra_trees`, `modeling_hist_gradient_boosting`, `modeling_xgboost`, aggregate `modeling`, and `data_drift`
 - Persisted modeling outputs:
   - `logistic_regression_model.pkl`: prediction-ready baseline bundle containing fitted learned preprocessing and the trained LogisticRegression estimator
   - `{random_forest,extra_trees,hist_gradient_boosting,xgboost}_model.pkl`: prediction-ready Optuna-selected bundles containing fitted learned preprocessing and the trained estimator
@@ -147,6 +170,17 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
   - `mlflow_run_info.csv`: MLflow run identifier and tracking metadata
   - `{random_forest,extra_trees,hist_gradient_boosting,xgboost}_mlflow_run_info.csv`: tuned model MLflow run identifiers and tracking metadata
 
+## Explainability And Drift
+
+- The aggregate `modeling` pipeline computes SHAP values for the persisted Random Forest bundle after model comparison.
+- SHAP uses the bundle's fitted learned preprocessing before explaining the estimator inputs.
+- Explainability outputs:
+  - `data/08_reporting/random_forest_shap_summary.csv`
+  - `data/08_reporting/random_forest_shap_summary_plot.png`
+- The separate `data_drift` pipeline compares each shared `X_train` and `X_test` feature with a two-sample Kolmogorov-Smirnov test.
+- Features with `p_value < data_drift.significance_threshold` are marked as drifted; the default threshold is `0.05`.
+- Drift output: `data/08_reporting/drift_report.csv`
+
 ## Running The Pipeline
 
 1. Install dependencies with `uv sync`.
@@ -158,11 +192,34 @@ Current scope: Kedro-based preprocessing and registered per-model modeling for t
 7. Run only ExtraTrees with `uv run kedro run --pipeline modeling_extra_trees`.
 8. Run only HistGradientBoosting with `uv run kedro run --pipeline modeling_hist_gradient_boosting`.
 9. Run only XGBoost with `uv run kedro run --pipeline modeling_xgboost`.
-10. Inspect persisted local outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
-11. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns`.
-12. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
+10. Run drift detection with `uv run kedro run --pipeline data_drift`.
+11. Inspect persisted outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
+12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns`.
+13. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
 
-The per-model modeling pipelines expect the final preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale.
+The per-model modeling and data drift pipelines expect preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.
+
+## Serving Predictions
+
+The API loads `data/06_models/random_forest_model.pkl` at startup. Generate that artifact with the default pipeline, aggregate `modeling` pipeline, or `modeling_random_forest` pipeline before starting the service.
+
+Run the FastAPI service locally:
+
+```bash
+uv run uvicorn mlops_project.serving.app:app --reload
+```
+
+Or build and run it with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+The service listens on `http://localhost:8000` and exposes:
+
+- `GET /health`: confirms that the service is running and identifies the loaded model.
+- `POST /predict`: accepts one JSON object containing the nine raw water-quality measurements and returns the binary prediction plus potable-class probability. `ph`, `Sulfate`, and `Trihalomethanes` may be `null`; the remaining measurements are required.
+- `GET /docs`: serves the generated OpenAPI interface and request example.
 
 ## MLflow Snapshot Sharing
 

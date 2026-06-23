@@ -53,17 +53,19 @@ In the final sprint we added the three production-readiness components. SHAP exp
 
 ### 3.1 Exploratory Analysis
 
-The EDA revealed three important characteristics of the dataset:
+The EDA revealed three important characteristics of the dataset, visible in the feature distributions below:
 
-**Near-Gaussian feature distributions.** All nine measurements have skewness below 0.7 in absolute value, which justifies using parametric methods: Z-score outlier removal, mean imputation, and standard scaling all assume roughly symmetric distributions and are appropriate here.
+![Distribution of numerical features](../notebooks/images/distribution_numerical_features.png)
 
-**Selective missingness.** Only pH (15.0 %), sulfate (23.8 %), and trihalomethanes (4.9 %) have missing values. All three are nullable by domain convention — laboratory instruments occasionally produce readings outside their calibration range and the measurement is recorded as absent rather than zero. Mean imputation fitted on each training fold handles these gaps without encoding the evaluation split's distribution into the transform.
+**Near-Gaussian feature distributions.** All nine measurements have skewness below 0.7 in absolute value, which justifies parametric preprocessing: Z-score outlier removal, mean imputation, and standard scaling all assume roughly symmetric distributions.
 
-**Moderate class imbalance.** 39 % of samples are labelled potable and 61 % non-potable. This is a meaningful but not extreme imbalance. Stratified splitting and stratified CV folds preserve this ratio across every subset, and ROC-AUC is used as the primary development metric precisely because it is invariant to the class threshold.
+**Selective missingness.** Only pH (15.0 %), sulfate (23.8 %), and trihalomethanes (4.9 %) have missing values. All three are nullable by domain convention — instruments occasionally produce out-of-range readings that are recorded as absent rather than zero. Mean imputation fitted per training fold handles these gaps without leaking evaluation-split statistics into the transform.
+
+**Moderate class imbalance.** 39 % of samples are potable, 61 % are not. Stratified splitting and CV folds preserve this ratio across every subset, and ROC-AUC is the primary development metric precisely because it is threshold-invariant.
 
 ### 3.2 Feature Engineering
 
-We constructed 23 additional features from domain knowledge about water chemistry: six ratio features (e.g., `conductivity_solids_ratio`, `tds_conductivity_ratio`), four interaction terms (e.g., `chloramines_ph_interaction`), four additive composites (e.g., `disinfection_stress = Sulfate + Chloramines`), and nine binary flags and risk scores based on WHO water quality guidelines. RFECV then selected the subset of these 32 features that improved cross-validated ROC-AUC.
+We constructed 23 additional features from domain knowledge: ratio features (e.g., `conductivity_solids_ratio`), interaction terms (e.g., `chloramines_ph_interaction`), additive composites (e.g., `disinfection_stress = Sulfate + Chloramines`), and binary risk flags based on WHO guidelines. RFECV then selected the subset of these 32 features that improved cross-validated ROC-AUC.
 
 ### 3.3 Model Comparison
 
@@ -77,32 +79,19 @@ All models were evaluated with 5-fold stratified cross-validation on the trainin
 | 4 | Extra Trees | 0.166 ± 0.117 | 0.664 | 0.175 |
 | 5 | Logistic Regression | 0.132 ± 0.076 | 0.551 | 0.136 |
 
-Random Forest achieves the highest CV F1 (0.476) and the highest test ROC-AUC (0.678), clearing both success thresholds. The logistic regression baseline, while stable (low CV std), is far behind the tree models, confirming that the relationship between water quality measurements and potability is not well captured by a linear boundary. Extra Trees shows high variance across folds (std 0.117) despite a reasonable test AUC, suggesting it did not generalise as reliably as the other ensembles.
+Random Forest achieves the highest CV F1 (0.476) and the highest test ROC-AUC (0.678), clearing both success thresholds from Section 1. The logistic regression baseline, while stable (low CV std), is far behind the tree models, confirming the relationship between water quality and potability is not well captured by a linear boundary. Extra Trees shows high variance across folds (std 0.117) despite a reasonable test AUC, suggesting it generalised less reliably than the other ensembles.
 
-Both success metrics are satisfied: **test ROC-AUC of 0.678 ≥ 0.65** and **test F1 of 0.514 ≥ 0.45**.
+![Random Forest test confusion matrix](../data/08_reporting/random_forest_test_confusion_matrix.png)
+
+The confusion matrix on the test split shows the model is better at identifying non-potable samples (the majority class) than potable ones, which is expected given the class imbalance and the modest recall (0.49) for the positive class.
 
 ### 3.4 SHAP Feature Importance (Random Forest)
 
-SHAP (SHapley Additive exPlanations) provides a theoretically grounded attribution of each feature's contribution to individual predictions. We used TreeExplainer, which computes exact SHAP values for tree models without approximation.
+SHAP (SHapley Additive exPlanations) attributes each feature's contribution to individual predictions on a theoretically grounded basis. We used TreeExplainer, which computes exact SHAP values for tree models without approximation.
 
-The ten most influential features on the test set, ranked by mean absolute SHAP value, are:
+![Random Forest SHAP feature importance](../data/08_reporting/random_forest_shap_summary_plot.png)
 
-| Rank | Feature | Mean \|SHAP\| |
-|------|---------|--------------|
-| 1 | ph | 0.0329 |
-| 2 | chloramines_ph_interaction | 0.0247 |
-| 3 | hardness_solids_ratio | 0.0152 |
-| 4 | solids_sulfate_diff | 0.0148 |
-| 5 | ph_safe_range | 0.0137 |
-| 6 | Chloramines | 0.0130 |
-| 7 | Hardness | 0.0104 |
-| 8 | hardness_conductivity_ratio | 0.0073 |
-| 9 | Solids | 0.0065 |
-| 10 | conductivity_solids_ratio | 0.0059 |
-
-pH dominates, which is consistent with domain knowledge: pH is the single most commonly monitored indicator of water safety, and extreme values (below 6.5 or above 8.5) are the most immediate disqualifying factor for potability. The second-ranked feature is `chloramines_ph_interaction`, reflecting that the combined effect of chloramine concentration and acidity matters more than either in isolation — both are disinfection-related and interact chemically. The engineered features occupying ranks 2–5 and 8–10 demonstrate that the feature engineering step added genuine predictive value beyond the raw measurements.
-
-The full SHAP summary bar plot is saved at `data/08_reporting/random_forest_shap_summary_plot.png`.
+pH dominates, consistent with domain knowledge: it is the single most commonly monitored indicator of water safety, and extreme values (below 6.5 or above 8.5) are an immediate disqualifying factor. The second-ranked feature, `chloramines_ph_interaction`, shows that the combined effect of chloramine concentration and acidity matters more than either alone — both are disinfection-related and interact chemically. Several of the top-ten features are engineered (ranks 2–5, 8, 10), which confirms that the feature engineering step in Section 3.2 added genuine predictive value beyond the nine raw measurements.
 
 ---
 
@@ -110,23 +99,23 @@ The full SHAP summary bar plot is saved at `data/08_reporting/random_forest_shap
 
 ### 4.1 Technology Choices and Their Advantages
 
-**Kedro** structures the project as a directed acyclic graph of named nodes, with every intermediate dataset catalogued in a single YAML file. This makes it trivial to rerun any subset of the pipeline in isolation (`kedro run --pipeline=data_drift`) and ensures that every experiment starts from a reproducible state. Without Kedro, the preprocessing and modelling code would likely be a series of scripts with implicit dependencies between files — difficult to audit and prone to subtle execution-order bugs.
+**Kedro** structures the project as a directed acyclic graph of named nodes, with every intermediate dataset catalogued in a single YAML file. This makes it trivial to rerun any subset of the pipeline in isolation (`kedro run --pipeline=data_drift`) and ensures every experiment starts from a reproducible state, instead of a series of scripts with implicit, hard-to-audit dependencies.
 
-**MLflow** provides experiment tracking that goes beyond simply saving the best model. Every CV run, Optuna trial, and final holdout evaluation is logged with its exact hyperparameters, metrics, and artifacts, creating a full audit trail. If we needed to roll back to the second-best model, the run is still there in `mlruns/`. The pyfunc model format also makes the serialised bundle self-describing, which simplifies deployment.
+**MLflow** provides experiment tracking that goes beyond saving the best model: every CV run, Optuna trial, and holdout evaluation is logged with its exact hyperparameters, metrics, and artifacts, creating a full audit trail we could use to roll back to an earlier model.
 
-**Optuna** with the TPE sampler explores the hyperparameter space more efficiently than random or grid search by building a probabilistic model of which regions tend to produce better results. For the Random Forest we ran 75 trials; the best configuration improved CV F1 by a non-trivial margin over the default parameters that logistic regression and the unfitted baselines use.
+**Optuna** with the TPE sampler explores the hyperparameter space more efficiently than grid search by building a probabilistic model of which regions tend to produce better results. For the Random Forest we ran 75 trials, improving CV F1 over the default, untuned parameters.
 
-**FastAPI + Docker** separate the prediction API from the training infrastructure. A consumer of the model does not need Python, uv, or Kedro installed — they send a JSON request with nine water quality measurements and receive a prediction and probability in return. The container bundles only the runtime dependencies and the trained model bundle, keeping the image lean.
+**FastAPI + Docker** separate the prediction API from the training infrastructure: a consumer sends nine water quality measurements as JSON and gets back a prediction and probability, with no Python or Kedro installation required on their end.
 
 ### 4.2 Risks and Mitigations
 
-**Data scale.** The current pipeline uses Pandas, which loads the entire dataset into memory on a single machine. The water potability dataset is small (< 1 MB), so this is not a problem today. However, if the same pipeline were applied to a continuous monitoring system producing millions of samples per day, Pandas would become a bottleneck. The mitigation would be to replace the Kedro CSV and pickle datasets with a distributed backend (e.g., Parquet on S3) and rewrite the transformation nodes using PySpark or Polars, which can scale horizontally. We estimate this would take approximately three additional weeks of engineering effort.
+**Data scale.** The pipeline uses Pandas, which loads the entire dataset into memory on a single machine. That is not a problem for this 3,276-row dataset, but if applied to a continuous monitoring system producing millions of samples per day, Pandas would become a bottleneck. Mitigation: move to a distributed backend (Parquet on S3, PySpark or Polars transforms) — we estimate roughly three additional weeks of engineering effort.
 
-**Model drift.** Water quality can shift seasonally, due to changes in source water, or following infrastructure events (pipe corrosion, treatment changes). The KS-based drift detection pipeline (`kedro run --pipeline=data_drift`) is a first early-warning signal: if feature distributions diverge significantly from the training baseline, a retraining run should be triggered. A more robust production setup would automate this check by running the drift pipeline on a rolling window of incoming predictions and alerting if more than a configurable fraction of features flag as drifted.
+**Model drift.** Water quality can shift seasonally or after infrastructure events (pipe corrosion, treatment changes). The KS-based drift pipeline (`kedro run --pipeline=data_drift`) is a first early-warning signal: when feature distributions diverge from the training baseline, a retraining run should be triggered. In production this check should run automatically on a rolling window of incoming data rather than on demand.
 
-**Class imbalance.** The 61/39 class split is manageable but not negligible. The tree models handle it reasonably, but the logistic regression baseline struggles with recall on the minority (potable) class. If the imbalance were more severe — or if the cost of false negatives (incorrectly marking unsafe water as potable) increased — oversampling techniques such as SMOTE or class-weighted loss functions should be explored. In the current proof of concept we accepted the natural distribution, but a production system serving a real water authority would need a deliberate cost-sensitivity analysis.
+**Class imbalance.** The 61/39 split is manageable but not negligible — the logistic regression baseline in particular struggles with recall on the minority (potable) class. A production system would need a deliberate cost-sensitivity analysis (e.g., SMOTE or class-weighted loss) if the cost of false negatives were higher than in this proof of concept.
 
-**Single-model serving.** The REST API currently serves only the Random Forest. If a future model comparison ranked a different estimator higher, the Dockerfile and the model path in `app.py` would need to be updated manually. A more mature setup would pull the model from the MLflow model registry by alias (e.g., `models:/water_potability@champion`) so the serving layer always picks up the latest promoted model without code changes.
+**Single-model serving.** The API currently serves only the Random Forest; if a future comparison ranked a different model higher, the Dockerfile and model path would need a manual update. A more mature setup would pull the model from the MLflow registry by alias (`models:/water_potability@champion`) so serving always tracks the latest promoted model.
 
 ---
 

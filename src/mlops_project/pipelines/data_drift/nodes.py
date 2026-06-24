@@ -30,15 +30,13 @@ def detect_feature_drift(
 ) -> pd.DataFrame:
     """Detect distribution shift between training and test features using the KS test.
 
-    For each feature column, we run a two-sample Kolmogorov-Smirnov test comparing
-    the training distribution (our reference baseline) against the test distribution
-    (representing data the model would see in production).  A low p-value indicates
-    that the two samples are unlikely to come from the same distribution, which is a
-    signal that drift may have occurred.
+    Runs a two-sample Kolmogorov-Smirnov test per feature column, comparing the
+    training distribution (the reference baseline) against the test distribution
+    (the data the model would see in production). A low p-value means the two
+    samples probably aren't from the same distribution, which is a sign of drift.
 
-    Returns a report with one row per feature containing the KS statistic, p-value,
-    and a boolean flag indicating whether the feature is considered drifted at the
-    configured significance level.
+    Returns one row per feature with the KS statistic, p-value, and a boolean
+    drifted flag based on the configured significance level.
     """
     threshold = float(parameters.get("significance_threshold", 0.05))
 
@@ -67,14 +65,14 @@ def simulate_production_drift(
 ) -> pd.DataFrame:
     """Simulate a production sample whose raw measurements have shifted.
 
-    X_train and X_test in this project come from the same random split of the
-    same dataset, so comparing them with the KS test mostly checks that the split
-    was done correctly -- it is not a real drift scenario. To exercise the drift
-    detector and the model the way they would actually be used in production, we
-    apply a hypothetical but realistic shift (e.g. a treatment plant changing its
-    disinfection process) to the raw measurements and recompute the engineered
-    features from the perturbed values, exactly as `_engineer_feature_frame` does
-    during training.
+    X_train and X_test come from the same random split of the same dataset, so
+    comparing them with the KS test mostly just checks that the split was done
+    correctly -- not a real drift scenario. This applies a hypothetical but
+    realistic shift to the raw measurements (e.g. a treatment plant changing its
+    disinfection process) and recomputes the engineered features from the
+    perturbed values, the same way `_engineer_feature_frame` does during
+    training, so the drift detector and the model can be tested the way they'd
+    actually be used in production.
     """
     shifts = parameters.get("simulated_shift", {})
 
@@ -94,10 +92,10 @@ def evaluate_model_under_simulated_drift(
 ) -> pd.DataFrame:
     """Score the trained model on the simulated production sample.
 
-    Reuses the same metric calculation as the regular test evaluation
-    (`evaluation.evaluate_model`) so the resulting row can be compared directly
-    against e.g. `random_forest_test_metrics` to see how far performance drops
-    once the input distribution no longer matches what the model was trained on.
+    Reuses the regular test evaluation (`evaluation.evaluate_model`), so the
+    output row is directly comparable to e.g. `random_forest_test_metrics` --
+    that comparison is what shows how far performance drops once the input
+    distribution no longer matches what the model was trained on.
     """
     metrics_frame, _ = modeling_evaluation.evaluate_model(model, simulated_X_test, y_test)
     return metrics_frame

@@ -8,15 +8,15 @@ from . import nodes
 def create_pipeline(**kwargs: object) -> Pipeline:
     """Create the data drift detection pipeline.
 
-    Two scenarios are checked:
+    Checks two scenarios:
 
     1. Training vs. test split -- a sanity baseline. X_train and X_test come
        from the same random split, so this should show little to no drift.
     2. Training vs. a simulated production sample -- X_test with a hypothetical
        shift in the raw measurements applied, recomputed through the same
-       feature engineering used at training time. This is the scenario that
-       resembles what drift monitoring is actually meant to catch, and we also
-       score the trained Random Forest on it to see the metric degradation.
+       feature engineering used at training time. This is closer to what drift
+       monitoring is actually meant to catch, and the trained Random Forest is
+       also scored on it to show the metric degradation directly.
     """
     del kwargs
     return pipeline(

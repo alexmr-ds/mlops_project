@@ -27,7 +27,8 @@ def compute_shap_values(
     explainer = shap.TreeExplainer(model_bundle.estimator)
     raw_shap = explainer.shap_values(X_transformed)
 
-    # RandomForestClassifier returns one array per class; we explain class 1 (potable)
+    # RandomForestClassifier returns one array per class, and class 1 (potable)
+    # is the one being explained here.
     if isinstance(raw_shap, list):
         shap_values = np.array(raw_shap[1])
     elif isinstance(raw_shap, np.ndarray) and raw_shap.ndim == 3:
@@ -67,7 +68,7 @@ def create_shap_summary_plot(
         )
 
     ax.set_xlabel("Mean |SHAP Value| (positive class)", fontsize=10)
-    ax.set_title("Feature Importance — Random Forest (SHAP)", fontsize=12, pad=12)
+    ax.set_title("Feature Importance - Random Forest (SHAP)", fontsize=12, pad=12)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_xlim(0, max(values) * 1.18)

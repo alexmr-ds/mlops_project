@@ -14,7 +14,7 @@ from mlops_project.pipelines.preprocessing.nodes import _engineer_feature_frame
 
 
 def _make_identical_splits(n_rows: int = 100) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Two splits sampled from the same distribution — expect no drift."""
+    """Two splits sampled from the same distribution; expect no drift."""
     rng = np.random.default_rng(73)
     features = ["ph", "Hardness", "Solids"]
     X_train = pd.DataFrame(rng.normal(5.0, 1.0, size=(n_rows, len(features))), columns=features)

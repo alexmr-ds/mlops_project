@@ -118,7 +118,7 @@ Current scope: an end-to-end Kedro MLOps proof of concept for the water potabili
 
 The repository currently includes a committed point-in-time snapshot of the raw dataset and generated artifacts under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`. Pipeline runs may replace these files or add new generated outputs; review those changes before committing another snapshot.
 
-`mlruns/` and `mlflow.db` at the repository root are **always local and gitignored** — every machine gets its own fresh copy the first time it logs an MLflow run, because a file-store `artifact_location` is recorded as an absolute, machine-specific path and can never be safely shared between machines. The shareable, point-in-time export instead lives under the tracked `mlflow_snapshot/` directory; see "MLflow Snapshot Sharing" below.
+`mlruns/` and `mlflow.db` at the repository root are **always local and gitignored**. Every machine gets its own fresh copy the first time it logs an MLflow run, because a file-store `artifact_location` is recorded as an absolute, machine-specific path and can never be safely shared between machines. The shareable, point-in-time export instead lives under the tracked `mlflow_snapshot/` directory; see "MLflow Snapshot Sharing" below.
 
 `reports/` stores tracked human-readable Markdown reports. `.gitignore` covers local virtual environments, Python and test caches, notebook checkpoints, the local `mlruns/`/`mlflow.db` tracking state, generated report exports, Kedro Viz state, and local helper scripts; it does not currently ignore `data/`.
 
@@ -156,7 +156,7 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 - Primary development metric: `cv_mean_f1`
 - Additional metrics: accuracy, precision, recall, F1, weighted F1, ROC AUC, and confusion matrix for the final test split
 - Model comparison: aggregate `modeling` writes `model_comparison.csv`, ranked by `cv_mean_f1` and including CV and final holdout accuracy, precision, recall, F1, weighted F1, and ROC AUC
-- MLflow tracking: local, gitignored `mlruns/` (created fresh on first run) with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables. `mlflow_snapshot/` holds an archived, read-only export from an earlier machine for reference only — it is never the backend for new local training runs.
+- MLflow tracking: local, gitignored `mlruns/` (created fresh on first run) with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables. `mlflow_snapshot/` holds an archived, read-only export from an earlier machine for reference only; it is never the backend for new local training runs.
 - Registered pipelines: `preprocessing`, `modeling_logistic_regression`, `modeling_random_forest`, `modeling_extra_trees`, `modeling_hist_gradient_boosting`, `modeling_xgboost`, aggregate `modeling`, and `data_drift`
 - Persisted modeling outputs:
   - `logistic_regression_model.pkl`: prediction-ready baseline bundle containing fitted learned preprocessing and the trained LogisticRegression estimator
@@ -183,13 +183,13 @@ The repository currently includes a committed point-in-time snapshot of the raw 
   - `data/08_reporting/random_forest_shap_summary_plot.png`
 - The separate `data_drift` pipeline runs two scenarios:
   1. A sanity baseline comparing each shared `X_train` and `X_test` feature with a two-sample Kolmogorov-Smirnov test. Since both splits come from the same random split of the same dataset, this is expected to show little to no drift.
-  2. A simulated production scenario: `simulate_production_drift` perturbs the raw measurements in `X_test` with a hypothetical but realistic shift (a treatment plant changing its disinfection process — lower pH, higher chloramines, sulfate, and trihalomethanes) and recomputes the engineered features the same way training does. `evaluate_model_under_simulated_drift` then scores the persisted Random Forest bundle on this sample so the resulting metric degradation is visible directly, not just inferred from the drift report.
+  2. A simulated production scenario: `simulate_production_drift` perturbs the raw measurements in `X_test` with a hypothetical but realistic shift (a treatment plant changing its disinfection process: lower pH, higher chloramines, sulfate, and trihalomethanes) and recomputes the engineered features the same way training does. `evaluate_model_under_simulated_drift` then scores the persisted Random Forest bundle on this sample so the resulting metric degradation is visible directly, not just inferred from the drift report.
 - Features with `p_value < data_drift.significance_threshold` are marked as drifted; the default threshold is `0.05`. The simulated shift amounts are configured under `data_drift.simulated_shift` in `parameters.yml`.
 - Drift outputs:
   - `data/08_reporting/drift_report.csv` (baseline X_train vs. X_test)
   - `data/08_reporting/simulated_drift_report.csv` (baseline vs. simulated production sample)
   - `data/08_reporting/simulated_drift_metrics.csv` (Random Forest test metrics on the simulated sample, comparable to `random_forest_test_metrics.csv`)
-- The simulated drift scenario additionally requires `data/06_models/random_forest_model.pkl` and `data/03_primary/y_test.pkl` — see "Running The Pipeline" below.
+- The simulated drift scenario additionally requires `data/06_models/random_forest_model.pkl` and `data/03_primary/y_test.pkl`; see "Running The Pipeline" below.
 
 ## Running The Pipeline
 
@@ -204,7 +204,7 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 9. Run only XGBoost with `uv run kedro run --pipeline modeling_xgboost`.
 10. Run drift detection with `uv run kedro run --pipeline data_drift`.
 11. Inspect persisted outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
-12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns` (only after running at least one modeling pipeline — `mlruns/` is gitignored and does not exist until the first local run creates it; the UI starts fine on a fresh clone but shows no experiments until then). To browse historical runs without training anything yourself, see the read-only `mlflow_snapshot/` export under "MLflow Snapshot Sharing" below instead.
+12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns` (only after running at least one modeling pipeline: `mlruns/` is gitignored and does not exist until the first local run creates it; the UI starts fine on a fresh clone but shows no experiments until then). To browse historical runs without training anything yourself, see the read-only `mlflow_snapshot/` export under "MLflow Snapshot Sharing" below instead.
 13. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
 
 The per-model modeling and data drift pipelines expect preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.
@@ -235,9 +235,9 @@ The service listens on `http://localhost:8000` and exposes:
 
 ## MLflow Snapshot Sharing
 
-`mlruns/` and `mlflow.db` at the repository root are **never committed** — they are gitignored and re-created fresh the first time anyone runs the modeling pipeline on their own machine. This is a hard requirement, not a style preference: a local file-store records `artifact_location` as an absolute, machine-specific path (e.g. `/Users/alexandre/Documents/mlops_project/mlruns/...`), so committing the live tracking directory and reusing it on another machine causes every artifact-logging call to fail with `PermissionError`.
+`mlruns/` and `mlflow.db` at the repository root are **never committed**: they are gitignored and re-created fresh the first time anyone runs the modeling pipeline on their own machine. This is a hard requirement, not a style preference: a local file-store records `artifact_location` as an absolute, machine-specific path (e.g. `/Users/alexandre/Documents/mlops_project/mlruns/...`), so committing the live tracking directory and reusing it on another machine causes every artifact-logging call to fail with `PermissionError`.
 
-Instead, `mlflow_snapshot/` is a **tracked, read-only, point-in-time export**: `mlflow_snapshot/mlruns/` (file store) plus `mlflow_snapshot/mlflow.db` (migrated SQLite metadata). It exists purely so a grader or teammate can browse historical params, metrics, and tags without re-running the pipeline. Because of the same absolute-path limitation, the artifact URIs recorded inside this snapshot still point at the original author's machine — metrics, params, and tags browse fine, but resolving model files, plots, or CSVs through the MLflow UI will not work on a different machine. Treat the snapshot as a reference for numbers, not a working backend.
+Instead, `mlflow_snapshot/` is a **tracked, read-only, point-in-time export**: `mlflow_snapshot/mlruns/` (file store) plus `mlflow_snapshot/mlflow.db` (migrated SQLite metadata). It exists purely so a grader or teammate can browse historical params, metrics, and tags without re-running the pipeline. Because of the same absolute-path limitation, the artifact URIs recorded inside this snapshot still point at the original author's machine: metrics, params, and tags browse fine, but resolving model files, plots, or CSVs through the MLflow UI will not work on a different machine. Treat the snapshot as a reference for numbers, not a working backend.
 
 The current snapshot was created from a local file store with:
 

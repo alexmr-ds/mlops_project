@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "mlops-project"
 version = "0.1.0"
@@ -45,3 +49,6 @@ project_id = "b67086f6403c47e1ba804183aaa83228"
 [tool.uv]
 add-bounds = "exact"
 exclude-newer = "7 days"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mlops_project"]

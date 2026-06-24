@@ -7,9 +7,12 @@ WORKDIR /app
 # Install uv for fast, reproducible dependency resolution
 RUN pip install --no-cache-dir uv==0.7.12
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
+COPY src/ ./src/
 # Install only production dependencies (no dev extras) into a project-local
-# .venv, exactly as the locked uv.lock resolved them.
+# .venv, exactly as the locked uv.lock resolved them. --no-editable builds
+# and installs mlops_project itself as a wheel, which needs README.md and
+# src/ present (hatchling reads the README and packages src/mlops_project).
 RUN uv sync --no-dev --no-editable --frozen
 
 # ---------------------------------------------------------------------------
@@ -22,12 +25,9 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:${PATH}"
 
-# Copy project source and the persisted Random Forest model bundle
-COPY src/ ./src/
+# mlops_project is already installed (non-editable) into .venv by the builder
+# stage, so only the persisted Random Forest model bundle is needed here.
 COPY data/06_models/random_forest_model.pkl ./data/06_models/random_forest_model.pkl
-
-# Make the src package importable
-ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
 

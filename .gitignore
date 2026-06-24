@@ -7,8 +7,13 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
-# Local MLflow tracking state. Force-add or archive mlruns/ only for a
-# deliberate read-only MLflow snapshot export.
+# Local MLflow tracking state. Every machine gets its own fresh mlruns/ and
+# mlflow.db (file-store artifact_location is always an absolute, machine-
+# specific path, so these can never be safely committed as the live tracking
+# destination). A frozen, read-only point-in-time export lives instead under
+# mlflow_snapshot/, which is tracked.
+/mlruns/
+/mlflow.db
 mlflow.db-shm
 mlflow.db-wal
 

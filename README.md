@@ -14,7 +14,6 @@ Current scope: an end-to-end Kedro MLOps proof of concept for the water potabili
 ├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
 ├── docker-compose.yml                             - Local container configuration, model mount, port mapping, and API health check.
 ├── main.py                                        - CLI entrypoint for local data bootstrap and MLflow secret-audit tasks.
-├── mlflow.db                                      - Committed read-only SQLite metadata snapshot migrated from existing local MLflow runs.
 ├── pyproject.toml                                 - Project metadata, dependencies, and Kedro project settings.
 ├── uv.lock                                        - Locked dependency resolution for `uv`.
 ├── conf/
@@ -31,7 +30,9 @@ Current scope: an end-to-end Kedro MLOps proof of concept for the water potabili
 │   └── adr/
 │       ├── 0001-random-forest-optuna-optimization.md - Architecture decision record for Optuna-based RandomForest tuning.
 │       └── 0002-generalized-optuna-tree-model-comparison.md - Architecture decision record for shared tree-based model tuning and comparison.
-├── mlruns/                                        - Committed point-in-time MLflow file-store snapshot containing run and model artifacts.
+├── mlflow_snapshot/                                - Frozen, read-only point-in-time MLflow export (see "MLflow Snapshot Sharing" below). Not the live tracking destination.
+│   ├── mlruns/                                     - Archived file-store run and model artifacts from the original author's machine.
+│   └── mlflow.db                                   - Archived SQLite metadata snapshot migrated from those runs.
 ├── notebooks/
 │   ├── EDA.ipynb                                  - Exploratory notebook that reads the locally prepared dataset and inspects distributions, missingness, and class balance.
 │   └── images/
@@ -114,9 +115,9 @@ Current scope: an end-to-end Kedro MLOps proof of concept for the water potabili
 
 The repository currently includes a committed point-in-time snapshot of the raw dataset and generated artifacts under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`. Pipeline runs may replace these files or add new generated outputs; review those changes before committing another snapshot.
 
-`mlruns/` and `mlflow.db` are both committed as a shareable point-in-time MLflow snapshot. The file store contains model files and run artifacts, while the SQLite database contains migrated metadata. Future local training also writes to `mlruns/`, so audit and review changes before refreshing the shared snapshot.
+`mlruns/` and `mlflow.db` at the repository root are **always local and gitignored** — every machine gets its own fresh copy the first time it logs an MLflow run, because a file-store `artifact_location` is recorded as an absolute, machine-specific path and can never be safely shared between machines. The shareable, point-in-time export instead lives under the tracked `mlflow_snapshot/` directory; see "MLflow Snapshot Sharing" below.
 
-`reports/` stores tracked human-readable Markdown reports. `.gitignore` covers local virtual environments, Python and test caches, notebook checkpoints, MLflow SQLite sidecars, generated report exports, Kedro Viz state, and local helper scripts; it does not currently ignore `data/` or `mlruns/`.
+`reports/` stores tracked human-readable Markdown reports. `.gitignore` covers local virtual environments, Python and test caches, notebook checkpoints, the local `mlruns/`/`mlflow.db` tracking state, generated report exports, Kedro Viz state, and local helper scripts; it does not currently ignore `data/`.
 
 ## Preprocessing Behavior
 
@@ -152,7 +153,7 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 - Primary development metric: `cv_mean_f1`
 - Additional metrics: accuracy, precision, recall, F1, weighted F1, ROC AUC, and confusion matrix for the final test split
 - Model comparison: aggregate `modeling` writes `model_comparison.csv`, ranked by `cv_mean_f1` and including CV and final holdout accuracy, precision, recall, F1, weighted F1, and ROC AUC
-- MLflow tracking: local `mlruns/` with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables. `mlflow.db` is a committed point-in-time read-only metadata snapshot for sharing existing runs, not the backend used for future local training runs.
+- MLflow tracking: local, gitignored `mlruns/` (created fresh on first run) with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables. `mlflow_snapshot/` holds an archived, read-only export from an earlier machine for reference only — it is never the backend for new local training runs.
 - Registered pipelines: `preprocessing`, `modeling_logistic_regression`, `modeling_random_forest`, `modeling_extra_trees`, `modeling_hist_gradient_boosting`, `modeling_xgboost`, aggregate `modeling`, and `data_drift`
 - Persisted modeling outputs:
   - `logistic_regression_model.pkl`: prediction-ready baseline bundle containing fitted learned preprocessing and the trained LogisticRegression estimator
@@ -223,31 +224,34 @@ The service listens on `http://localhost:8000` and exposes:
 
 ## MLflow Snapshot Sharing
 
-`mlflow.db` is a committed read-only snapshot of existing MLflow run metadata. It contains experiments, runs, params, metrics, tags, and logged-model records. It does not contain model files, plots, CSVs, or pyfunc artifacts; those remain under `mlruns/`.
+`mlruns/` and `mlflow.db` at the repository root are **never committed** — they are gitignored and re-created fresh the first time anyone runs the modeling pipeline on their own machine. This is a hard requirement, not a style preference: a local file-store records `artifact_location` as an absolute, machine-specific path (e.g. `/Users/alexandre/Documents/mlops_project/mlruns/...`), so committing the live tracking directory and reusing it on another machine causes every artifact-logging call to fail with `PermissionError`.
 
-The current snapshot was created from the local file store with:
+Instead, `mlflow_snapshot/` is a **tracked, read-only, point-in-time export**: `mlflow_snapshot/mlruns/` (file store) plus `mlflow_snapshot/mlflow.db` (migrated SQLite metadata). It exists purely so a grader or teammate can browse historical params, metrics, and tags without re-running the pipeline. Because of the same absolute-path limitation, the artifact URIs recorded inside this snapshot still point at the original author's machine — metrics, params, and tags browse fine, but resolving model files, plots, or CSVs through the MLflow UI will not work on a different machine. Treat the snapshot as a reference for numbers, not a working backend.
+
+The current snapshot was created from a local file store with:
 
 ```bash
 uv run mlflow migrate-filestore \
   --source ./mlruns \
-  --target sqlite:///./mlflow.db
+  --target sqlite:///./mlflow_snapshot/mlflow.db
+cp -r ./mlruns ./mlflow_snapshot/mlruns
 ```
 
 The target database must be empty when refreshing the snapshot. If MLflow reports duplicate metric rows during migration, migrate from a temporary de-duplicated copy of `mlruns/` and leave the working `mlruns/` directory unchanged.
 
-Before migrating or committing a refreshed snapshot, run `uv run python main.py audit-mlflow-secrets` and confirm it reports zero suspicious locations.
+Before committing a refreshed snapshot, run `uv run python main.py audit-mlflow-secrets --tracking-dir mlflow_snapshot/mlruns --db mlflow_snapshot/mlflow.db` and confirm it reports zero suspicious locations.
 
-To inspect the snapshot on another machine, make sure both `mlflow.db` and `mlruns/` are present. The server command below is sufficient only when the artifact URIs stored inside `mlflow.db` already resolve under that machine's local `mlruns/` directory. If the copied database still points at a different checkout, regenerate the snapshot locally from `mlruns/` or rewrite the file-based `mlruns` URIs in a local copy of `mlflow.db` before starting the server.
+To browse the archived snapshot's metrics and params:
 
 ```bash
 uv run mlflow server \
-  --backend-store-uri sqlite:///mlflow.db \
-  --default-artifact-root ./mlruns
+  --backend-store-uri sqlite:///mlflow_snapshot/mlflow.db \
+  --default-artifact-root ./mlflow_snapshot/mlruns
 ```
 
-Open the MLflow UI URL printed by the server and inspect the `water_potability_modeling` experiment. This repository does not track a rebasing helper under `scripts/`; treat any URI-rewrite helper as local-only tooling. If the installed MLflow version requires `mlflow ui` instead of `mlflow server` for local inspection, use the same `--backend-store-uri sqlite:///mlflow.db` value.
+Open the MLflow UI URL printed by the server and inspect the `water_potability_modeling` experiment. If the installed MLflow version requires `mlflow ui` instead of `mlflow server` for local inspection, use the same `--backend-store-uri sqlite:///mlflow_snapshot/mlflow.db` value.
 
-This snapshot is not a multi-user writable backend. Continue generating new local runs through the configured `mlruns` tracking URI; refresh the snapshot only when you want to export another point-in-time view.
+This snapshot is not a multi-user writable backend. New local runs always go through the local, gitignored `mlruns` tracking URI; refresh the snapshot only when you want to export another point-in-time view for sharing.
 
 ## Data Convention
 

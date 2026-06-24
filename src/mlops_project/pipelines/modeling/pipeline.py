@@ -14,7 +14,12 @@ TunedNodeFunction = Callable[
 
 
 def create_pipeline(**kwargs: object) -> Pipeline:
-    """Create the aggregate modeling pipeline."""
+    """Create the aggregate, reproducible modeling pipeline.
+
+    This default pipeline refits every tuned model from its persisted, committed
+    best parameters (no Optuna), so repeated runs reproduce the same artifacts.
+    Hyperparameter search lives in the separate, opt-in ``tuning`` pipeline.
+    """
     del kwargs
     return (
         create_logistic_regression_pipeline()
@@ -23,7 +28,25 @@ def create_pipeline(**kwargs: object) -> Pipeline:
         + create_hist_gradient_boosting_pipeline()
         + create_xgboost_pipeline()
         + create_model_comparison_pipeline()
-        + create_random_forest_shap_pipeline()
+        + create_extra_trees_shap_pipeline()
+    )
+
+
+def create_tuning_pipeline(**kwargs: object) -> Pipeline:
+    """Create the aggregate, opt-in Optuna tuning pipeline for all tree-based models.
+
+    This is intentionally NOT part of the default run. Optuna's TPE search is
+    sequential and sensitive to floating-point differences, so it is not
+    bit-reproducible across machines; running it rewrites the committed
+    ``*_best_params`` and Optuna trial logs that the reproducible ``modeling``
+    pipeline then refits from.
+    """
+    del kwargs
+    return (
+        create_tuning_random_forest_pipeline()
+        + create_tuning_extra_trees_pipeline()
+        + create_tuning_hist_gradient_boosting_pipeline()
+        + create_tuning_xgboost_pipeline()
     )
 
 
@@ -78,75 +101,104 @@ def create_logistic_regression_pipeline(**kwargs: object) -> Pipeline:
 
 
 def create_random_forest_pipeline(**kwargs: object) -> Pipeline:
-    """Create the RandomForestClassifier modeling pipeline."""
+    """Create the reproducible RandomForest modeling pipeline (refit from locked params)."""
     del kwargs
-    return create_tuned_model_pipeline(
+    return create_refit_model_pipeline(
         model_name="random_forest",
-        tune_function=nodes.tune_random_forest_hyperparameters,
+        cv_function=nodes.cross_validate_random_forest_with_best_params,
         train_function=nodes.train_evaluate_random_forest_with_best_params,
         log_function=nodes.log_random_forest_to_mlflow,
     )
 
 
 def create_extra_trees_pipeline(**kwargs: object) -> Pipeline:
-    """Create the ExtraTreesClassifier modeling pipeline."""
+    """Create the reproducible ExtraTrees modeling pipeline (refit from locked params)."""
     del kwargs
-    return create_tuned_model_pipeline(
+    return create_refit_model_pipeline(
         model_name="extra_trees",
-        tune_function=nodes.tune_extra_trees_hyperparameters,
+        cv_function=nodes.cross_validate_extra_trees_with_best_params,
         train_function=nodes.train_evaluate_extra_trees_with_best_params,
         log_function=nodes.log_extra_trees_to_mlflow,
     )
 
 
 def create_hist_gradient_boosting_pipeline(**kwargs: object) -> Pipeline:
-    """Create the HistGradientBoostingClassifier modeling pipeline."""
+    """Create the reproducible HistGradientBoosting modeling pipeline (refit from locked params)."""
     del kwargs
-    return create_tuned_model_pipeline(
+    return create_refit_model_pipeline(
         model_name="hist_gradient_boosting",
-        tune_function=nodes.tune_hist_gradient_boosting_hyperparameters,
+        cv_function=nodes.cross_validate_hist_gradient_boosting_with_best_params,
         train_function=nodes.train_evaluate_hist_gradient_boosting_with_best_params,
         log_function=nodes.log_hist_gradient_boosting_to_mlflow,
     )
 
 
 def create_xgboost_pipeline(**kwargs: object) -> Pipeline:
-    """Create the XGBoost modeling pipeline."""
+    """Create the reproducible XGBoost modeling pipeline (refit from locked params)."""
     del kwargs
-    return create_tuned_model_pipeline(
+    return create_refit_model_pipeline(
         model_name="xgboost",
-        tune_function=nodes.tune_xgboost_hyperparameters,
+        cv_function=nodes.cross_validate_xgboost_with_best_params,
         train_function=nodes.train_evaluate_xgboost_with_best_params,
         log_function=nodes.log_xgboost_to_mlflow,
     )
 
 
-def create_tuned_model_pipeline(
+def create_tuning_random_forest_pipeline(**kwargs: object) -> Pipeline:
+    """Create the opt-in Optuna tuning pipeline for RandomForest."""
+    del kwargs
+    return create_tuning_model_pipeline("random_forest", nodes.tune_random_forest_hyperparameters)
+
+
+def create_tuning_extra_trees_pipeline(**kwargs: object) -> Pipeline:
+    """Create the opt-in Optuna tuning pipeline for ExtraTrees."""
+    del kwargs
+    return create_tuning_model_pipeline("extra_trees", nodes.tune_extra_trees_hyperparameters)
+
+
+def create_tuning_hist_gradient_boosting_pipeline(**kwargs: object) -> Pipeline:
+    """Create the opt-in Optuna tuning pipeline for HistGradientBoosting."""
+    del kwargs
+    return create_tuning_model_pipeline(
+        "hist_gradient_boosting", nodes.tune_hist_gradient_boosting_hyperparameters
+    )
+
+
+def create_tuning_xgboost_pipeline(**kwargs: object) -> Pipeline:
+    """Create the opt-in Optuna tuning pipeline for XGBoost."""
+    del kwargs
+    return create_tuning_model_pipeline("xgboost", nodes.tune_xgboost_hyperparameters)
+
+
+def create_refit_model_pipeline(
     *,
     model_name: str,
-    tune_function: TunedNodeFunction,
+    cv_function: Callable[..., tuple[Any, Any]],
     train_function: Callable[..., tuple[Any, Any, Any, list[str]]],
     log_function: Callable[..., Any],
 ) -> Pipeline:
-    """Create one tuned model-family pipeline."""
+    """Create one reproducible model-family pipeline that refits from locked params.
+
+    The committed ``{model}_best_params`` and Optuna trial logs are read as free
+    inputs (produced by the opt-in tuning pipeline); no Optuna runs here, so the
+    cross-validation, refit, and final evaluation are deterministic.
+    """
     return pipeline(
         [
             node(
-                func=tune_function,
+                func=cv_function,
                 inputs=[
                     "X_train",
                     "y_train",
                     "params:preprocessing",
                     "params:modeling",
+                    f"{model_name}_best_params",
                 ],
                 outputs=[
-                    f"{model_name}_best_params",
                     f"{model_name}_cv_metrics",
                     f"{model_name}_cv_fold_metrics",
-                    f"{model_name}_optuna_trials",
-                    f"{model_name}_optuna_fold_metrics",
                 ],
-                name=f"tune_{model_name}_hyperparameters_node",
+                name=f"cross_validate_{model_name}_with_best_params_node",
             ),
             node(
                 func=train_function,
@@ -195,16 +247,44 @@ def create_tuned_model_pipeline(
     )
 
 
-def create_random_forest_shap_pipeline(**kwargs: object) -> Pipeline:
-    """Create the SHAP explainability pipeline for the best-performing Random Forest."""
+def create_tuning_model_pipeline(
+    model_name: str,
+    tune_function: TunedNodeFunction,
+) -> Pipeline:
+    """Create one opt-in Optuna tuning pipeline that rewrites locked params and logs."""
+    return pipeline(
+        [
+            node(
+                func=tune_function,
+                inputs=[
+                    "X_train",
+                    "y_train",
+                    "params:preprocessing",
+                    "params:modeling",
+                ],
+                outputs=[
+                    f"{model_name}_best_params",
+                    f"{model_name}_cv_metrics",
+                    f"{model_name}_cv_fold_metrics",
+                    f"{model_name}_optuna_trials",
+                    f"{model_name}_optuna_fold_metrics",
+                ],
+                name=f"tune_{model_name}_hyperparameters_node",
+            ),
+        ]
+    )
+
+
+def create_extra_trees_shap_pipeline(**kwargs: object) -> Pipeline:
+    """Create the SHAP explainability pipeline for the best-performing Extra Trees model."""
     del kwargs
     return pipeline(
         [
             node(
-                func=nodes.compute_random_forest_shap_values,
-                inputs=["random_forest_model", "X_test"],
-                outputs=["random_forest_shap_summary", "random_forest_shap_summary_plot"],
-                name="compute_random_forest_shap_values_node",
+                func=nodes.compute_extra_trees_shap_values,
+                inputs=["extra_trees_model", "X_test"],
+                outputs=["extra_trees_shap_summary", "extra_trees_shap_summary_plot"],
+                name="compute_extra_trees_shap_values_node",
             ),
         ]
     )

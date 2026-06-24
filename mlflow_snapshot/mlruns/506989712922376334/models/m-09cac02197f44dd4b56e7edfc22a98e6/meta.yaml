@@ -1,0 +1,10 @@
+artifact_location: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/models/m-09cac02197f44dd4b56e7edfc22a98e6/artifacts
+creation_timestamp: 1782342936241
+experiment_id: '506989712922376334'
+last_updated_timestamp: 1782342936374
+model_id: m-09cac02197f44dd4b56e7edfc22a98e6
+model_type: null
+name: xgboost_model
+source_run_id: 6a7942dd683945048d23c95769bf7930
+status: 2
+status_message: null

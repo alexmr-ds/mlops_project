@@ -269,6 +269,93 @@ def train_evaluate_model_with_best_params(
     )
 
 
+def cross_validate_with_best_params(
+    model_name: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+    best_params: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cross-validate one tuned model family from persisted best parameters.
+
+    Used by the reproducible default modeling pipeline, which refits from locked
+    parameters instead of re-running Optuna. The resulting CV metrics match the
+    best-trial CV metrics recorded by the opt-in tuning pipeline because both run
+    the same training-set cross-validation with the same parameters.
+    """
+    modeling_optimization.validate_model_parameters(model_name, best_params)
+    model_parameters = modeling_optimization.resolve_model_parameters(
+        modeling_parameters,
+        model_name,
+        selected_params=best_params,
+    )
+    result = modeling_evaluation.cross_validate_model(
+        model_name=model_name,
+        X_train=X_train,
+        y_train=y_train,
+        preprocessing_parameters=preprocessing_parameters,
+        modeling_parameters=modeling_optimization.with_model_parameters(
+            modeling_parameters,
+            model_name,
+            model_parameters,
+        ),
+    )
+    return result.cv_metrics, result.cv_fold_metrics
+
+
+def cross_validate_random_forest_with_best_params(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+    best_params: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cross-validate the random forest from persisted best parameters."""
+    return cross_validate_with_best_params(
+        "random_forest", X_train, y_train, preprocessing_parameters, modeling_parameters, best_params
+    )
+
+
+def cross_validate_extra_trees_with_best_params(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+    best_params: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cross-validate the extra trees model from persisted best parameters."""
+    return cross_validate_with_best_params(
+        "extra_trees", X_train, y_train, preprocessing_parameters, modeling_parameters, best_params
+    )
+
+
+def cross_validate_hist_gradient_boosting_with_best_params(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+    best_params: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cross-validate the histogram gradient boosting model from persisted best parameters."""
+    return cross_validate_with_best_params(
+        "hist_gradient_boosting", X_train, y_train, preprocessing_parameters, modeling_parameters, best_params
+    )
+
+
+def cross_validate_xgboost_with_best_params(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    preprocessing_parameters: dict[str, Any],
+    modeling_parameters: dict[str, Any],
+    best_params: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cross-validate the XGBoost model from persisted best parameters."""
+    return cross_validate_with_best_params(
+        "xgboost", X_train, y_train, preprocessing_parameters, modeling_parameters, best_params
+    )
+
+
 def evaluate_model(
     model: Any,
     X_test: pd.DataFrame,
@@ -555,11 +642,11 @@ def build_model_comparison(
     return comparison.reset_index(drop=True)
 
 
-def compute_random_forest_shap_values(
+def compute_extra_trees_shap_values(
     model: Any,
     X_test: pd.DataFrame,
 ) -> tuple[pd.DataFrame, Figure]:
-    """Compute SHAP values for the fitted random forest and produce a summary plot.
+    """Compute SHAP values for the fitted Extra Trees champion and produce a summary plot.
 
     Returns the per-feature summary DataFrame and the bar-chart Figure so both
     can be persisted independently through the Kedro catalog.
@@ -568,7 +655,9 @@ def compute_random_forest_shap_values(
         model_bundle=model,
         X_test=X_test,
     )
-    shap_plot = modeling_explainability.create_shap_summary_plot(shap_values, shap_summary)
+    shap_plot = modeling_explainability.create_shap_summary_plot(
+        shap_values, shap_summary, model_label="Extra Trees"
+    )
     return shap_summary, shap_plot
 
 

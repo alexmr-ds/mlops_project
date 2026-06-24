@@ -1,0 +1,14 @@
+artifact_uri: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/31bb9b14c56d435b9fbc369915e99334/artifacts
+end_time: 1782342935793
+entry_point_name: ''
+experiment_id: '506989712922376334'
+lifecycle_stage: active
+run_id: 31bb9b14c56d435b9fbc369915e99334
+run_name: hist_gradient_boosting_nonlinear_probe
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1782342935629
+status: 3
+tags: []
+user_id: mehmet

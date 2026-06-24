@@ -26,8 +26,8 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:${PATH}"
 
 # mlops_project is already installed (non-editable) into .venv by the builder
-# stage, so only the persisted Random Forest model bundle is needed here.
-COPY data/06_models/random_forest_model.pkl ./data/06_models/random_forest_model.pkl
+# stage, so only the persisted Extra Trees model bundle is needed here.
+COPY data/06_models/extra_trees_model.pkl ./data/06_models/extra_trees_model.pkl
 
 EXPOSE 8000
 

@@ -11,11 +11,16 @@ __pycache__/
 # mlflow.db (file-store artifact_location is always an absolute, machine-
 # specific path, so these can never be safely committed as the live tracking
 # destination). A frozen, read-only point-in-time export lives instead under
-# mlflow_snapshot/, which is tracked.
+# mlflow_snapshot/mlruns/, which is tracked.
 /mlruns/
 /mlflow.db
 mlflow.db-shm
 mlflow.db-wal
+# The migrated SQLite snapshot is generated locally, not committed: GitHub push
+# protection flags a false-positive "Lob Test API Key" because the binary packs
+# the metric key `test_*` next to a 32-char run id. Regenerate it from the
+# tracked file store with `mlflow migrate-filestore` (see README).
+mlflow_snapshot/mlflow.db
 
 # Generated report exports. Markdown reports under reports/ are tracked.
 reports/**/*.html

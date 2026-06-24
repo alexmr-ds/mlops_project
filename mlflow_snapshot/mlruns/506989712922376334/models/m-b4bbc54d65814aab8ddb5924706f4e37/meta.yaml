@@ -1,0 +1,10 @@
+artifact_location: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/models/m-b4bbc54d65814aab8ddb5924706f4e37/artifacts
+creation_timestamp: 1782342935844
+experiment_id: '506989712922376334'
+last_updated_timestamp: 1782342935958
+model_id: m-b4bbc54d65814aab8ddb5924706f4e37
+model_type: null
+name: logistic_regression_model
+source_run_id: 7a9c80340580419a890eedc391b23c46
+status: 2
+status_message: null

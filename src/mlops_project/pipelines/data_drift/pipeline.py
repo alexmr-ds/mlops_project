@@ -41,7 +41,7 @@ def create_pipeline(**kwargs: object) -> Pipeline:
             ),
             node(
                 func=nodes.evaluate_model_under_simulated_drift,
-                inputs=["random_forest_model", "simulated_X_test", "y_test"],
+                inputs=["extra_trees_model", "simulated_X_test", "y_test"],
                 outputs="simulated_drift_metrics",
                 name="evaluate_model_under_simulated_drift_node",
             ),

@@ -27,8 +27,8 @@ def compute_shap_values(
     explainer = shap.TreeExplainer(model_bundle.estimator)
     raw_shap = explainer.shap_values(X_transformed)
 
-    # RandomForestClassifier returns one array per class, and class 1 (potable)
-    # is the one being explained here.
+    # Tree ensembles return one array per class, and class 1 (potable) is the
+    # one being explained here.
     if isinstance(raw_shap, list):
         shap_values = np.array(raw_shap[1])
     elif isinstance(raw_shap, np.ndarray) and raw_shap.ndim == 3:
@@ -48,6 +48,7 @@ def compute_shap_values(
 def create_shap_summary_plot(
     shap_values: np.ndarray,
     shap_summary: pd.DataFrame,
+    model_label: str = "Extra Trees",
 ) -> Figure:
     """Horizontal bar chart of mean |SHAP| per feature, sorted by importance."""
     # Reverse order so the most important feature appears at the top
@@ -68,7 +69,7 @@ def create_shap_summary_plot(
         )
 
     ax.set_xlabel("Mean |SHAP Value| (positive class)", fontsize=10)
-    ax.set_title("Feature Importance - Random Forest (SHAP)", fontsize=12, pad=12)
+    ax.set_title(f"Feature Importance - {model_label} (SHAP)", fontsize=12, pad=12)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_xlim(0, max(values) * 1.18)

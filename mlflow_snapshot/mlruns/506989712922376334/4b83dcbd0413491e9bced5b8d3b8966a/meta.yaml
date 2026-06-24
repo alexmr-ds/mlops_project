@@ -1,0 +1,14 @@
+artifact_uri: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/4b83dcbd0413491e9bced5b8d3b8966a/artifacts
+end_time: 1782342936173
+entry_point_name: ''
+experiment_id: '506989712922376334'
+lifecycle_stage: active
+run_id: 4b83dcbd0413491e9bced5b8d3b8966a
+run_name: random_forest_nonlinear_probe
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1782342935996
+status: 3
+tags: []
+user_id: mehmet

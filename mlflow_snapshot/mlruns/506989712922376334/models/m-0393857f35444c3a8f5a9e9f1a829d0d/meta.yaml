@@ -1,0 +1,10 @@
+artifact_location: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/models/m-0393857f35444c3a8f5a9e9f1a829d0d/artifacts
+creation_timestamp: 1782342935202
+experiment_id: '506989712922376334'
+last_updated_timestamp: 1782342935534
+model_id: m-0393857f35444c3a8f5a9e9f1a829d0d
+model_type: null
+name: extra_trees_model
+source_run_id: ab6c440ea0e147d88780f2aee02ce62e
+status: 2
+status_message: null

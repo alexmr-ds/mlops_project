@@ -1,6 +1,6 @@
 # MLOps Project
 
-Current scope: an end-to-end Kedro MLOps proof of concept for the water potability dataset. It includes local Kaggle data setup, fail-fast Great Expectations validation, deterministic feature engineering, leakage-safe learned preprocessing, cross-validated LogisticRegression and Optuna-tuned tree-model comparison, final holdout evaluation, MLflow experiment tracking and snapshot sharing, Random Forest SHAP explainability, KS-test feature drift reporting, prediction-ready model bundles, and FastAPI serving through local or Docker execution. Exploratory analysis remains available under `notebooks/`.
+Current scope: an end-to-end Kedro MLOps proof of concept for the water potability dataset. It includes local Kaggle data setup, fail-fast Great Expectations validation, deterministic feature engineering, leakage-safe learned preprocessing, cross-validated LogisticRegression and Optuna-tuned tree-model comparison, final holdout evaluation, MLflow experiment tracking and snapshot sharing, Extra Trees SHAP explainability, KS-test feature drift reporting, prediction-ready model bundles, and FastAPI serving through local or Docker execution. Hyperparameter search is an opt-in `tuning` pipeline; the default `modeling` pipeline refits from the committed best parameters so repeated runs reproduce the same results. Exploratory analysis remains available under `notebooks/`.
 
 ## Quickstart
 
@@ -57,8 +57,7 @@ If you would rather inspect what is already committed than run anything yourself
 │       ├── 0001-random-forest-optuna-optimization.md - Architecture decision record for Optuna-based RandomForest tuning.
 │       └── 0002-generalized-optuna-tree-model-comparison.md - Architecture decision record for shared tree-based model tuning and comparison.
 ├── mlflow_snapshot/                                - Frozen, read-only point-in-time MLflow export (see "MLflow Snapshot Sharing" below). Not the live tracking destination.
-│   ├── mlruns/                                     - Archived file-store run and model artifacts from the original author's machine.
-│   └── mlflow.db                                   - Archived SQLite metadata snapshot migrated from those runs.
+│   └── mlruns/                                     - Tracked file-store run and model artifacts (browsable with `mlflow ui`). The migrated `mlflow.db` is gitignored, not committed.
 ├── notebooks/
 │   ├── EDA.ipynb                                  - Exploratory notebook that reads the locally prepared dataset and inspects distributions, missingness, and class balance.
 │   └── images/
@@ -78,7 +77,7 @@ If you would rather inspect what is already committed than run anything yourself
 │       ├── modeling/
 │       │   ├── __init__.py                        - Reusable modeling component package marker.
 │       │   ├── evaluation.py                      - Model construction, fold-local cross-validation, final holdout evaluation, metrics, and artifact validation helpers.
-│       │   ├── explainability.py                   - SHAP computation and summary plotting for the selected Random Forest bundle.
+│       │   ├── explainability.py                   - SHAP computation and summary plotting for the selected champion (Extra Trees) bundle.
 │       │   ├── experiment_tracking.py             - MLflow logging for fitted model bundles, metrics, confusion matrices, selected features, and Optuna artifacts.
 │       │   ├── model_bundle.py                    - Prediction-ready persisted model bundle that applies fitted learned preprocessing before estimator prediction.
 │       │   ├── optimization.py                    - Shared Optuna tuning, search-space sampling, selected-parameter resolution, and trial artifact builders for tree-based models.
@@ -90,7 +89,7 @@ If you would rather inspect what is already committed than run anything yourself
 │           ├── __init__.py                        - Pipeline namespace package.
 │           ├── data_drift/
 │           │   ├── __init__.py                    - Re-exports the data drift pipeline factory.
-│           │   ├── nodes.py                       - Two-sample KS feature-drift calculations, simulated production drift sampling, and Random Forest evaluation under simulated drift.
+│           │   ├── nodes.py                       - Two-sample KS feature-drift calculations, simulated production drift sampling, and Extra Trees evaluation under simulated drift.
 │           │   └── pipeline.py                    - Kedro node graph for the train/test drift baseline and the simulated production drift scenario.
 │           ├── modeling/
 │           │   ├── __init__.py                    - Re-exports the modeling pipeline factory.
@@ -103,7 +102,7 @@ If you would rather inspect what is already committed than run anything yourself
 │               └── validation.py                  - Great Expectations raw-data contract and engineered train/test modeling-input checks.
 │       └── serving/
 │           ├── __init__.py                        - Prediction-service package marker.
-│           └── app.py                             - FastAPI application exposing health and Random Forest prediction endpoints.
+│           └── app.py                             - FastAPI application exposing health and Extra Trees prediction endpoints.
 └── tests/
     ├── __init__.py                                - Test package marker.
     ├── test_data_setup.py                         - Unit tests for interactive credential bootstrap, dataset download, and CLI behavior.
@@ -112,7 +111,7 @@ If you would rather inspect what is already committed than run anything yourself
     │   ├── __init__.py                            - Pipeline test package marker.
     │   ├── data_drift/
     │   │   ├── __init__.py                        - Data drift test package marker.
-    │   │   └── test_nodes.py                      - Unit tests for KS statistics, thresholds, report shape, drift flags, simulated production drift sampling, and Random Forest evaluation under simulated drift.
+    │   │   └── test_nodes.py                      - Unit tests for KS statistics, thresholds, report shape, drift flags, simulated production drift sampling, and Extra Trees evaluation under simulated drift.
     │   ├── modeling/
     │   │   ├── __init__.py                        - Modeling test package marker.
     │   │   ├── test_explainability.py             - Unit tests for SHAP output shape, ordering, values, and plots.
@@ -187,7 +186,9 @@ Feature-store artifacts:
 - Tuned tree-based models: `RandomForestClassifier`, `ExtraTreesClassifier`, `HistGradientBoostingClassifier`, and `XGBClassifier`, each selected by seeded Optuna TPE hyperparameter optimization with `random_state=73` fixed where supported
 - Training data: engineered and validated `X_train` and `y_train`
 - Development evaluation: stratified k-fold cross-validation on the training split only
-- Hyperparameter optimization: RandomForest uses `modeling.random_forest_optimization.n_trials=75` by default; ExtraTrees, HistGradientBoosting, and XGBoost each use `50` trials by default. All tuned model families maximize binary `cv_mean_f1` on training-set cross-validation folds only
+- Champion model: `ExtraTreesClassifier`, which ranks first by the primary development metric (`cv_mean_f1`) in `model_comparison.csv`; it is the model used for SHAP explainability, the simulated-drift evaluation, and FastAPI serving
+- Reproducibility: the default `modeling` pipeline does **not** run Optuna. It refits each tuned model from the committed `{model}_best_params.pkl` and recomputes cross-validation deterministically, so repeated runs reproduce the same artifacts. Optuna search lives in the separate, opt-in `tuning` pipeline, which is the only thing that rewrites `{model}_best_params.pkl` and the Optuna trial logs. Optuna's TPE search is sequential and floating-point sensitive, so it is not bit-reproducible across machines; decoupling it keeps the default pipeline reproducible
+- Hyperparameter optimization (opt-in `tuning` pipeline): RandomForest uses `modeling.random_forest_optimization.n_trials=75`; ExtraTrees, HistGradientBoosting, and XGBoost each use `50` trials. All tuned model families maximize binary `cv_mean_f1` on training-set cross-validation folds only
 - Final holdout evaluation: engineered and validated `X_test` and `y_test`, evaluated once after each model is refit on all training data
 - Cross-validation config: `modeling.cross_validation.n_splits=5`, `shuffle=true`, `random_state=73`
 - Fold-local learned preprocessing: outlier removal on fold-training rows only, mean imputation, standard scaling, RFECV feature selection, then model fitting
@@ -197,12 +198,12 @@ Feature-store artifacts:
 - Additional metrics: accuracy, precision, recall, F1, weighted F1, ROC AUC, and confusion matrix for the final test split
 - Model comparison: aggregate `modeling` writes `model_comparison.csv`, ranked by `cv_mean_f1` and including CV and final holdout accuracy, precision, recall, F1, weighted F1, and ROC AUC
 - MLflow tracking: local, gitignored `mlruns/` (created fresh on first run) with experiment `water_potability_modeling` and separate runs for the baseline plus each tuned tree-based model; each run logs metrics, selected features, final test artifacts, and a logged pyfunc model so the MLflow UI shows it in the Models column; tuned tree-based models also log best parameters and consolidated Optuna trial tables. `mlflow_snapshot/` holds an archived, read-only export from an earlier machine for reference only; it is never the backend for new local training runs.
-- Registered pipelines: `preprocessing`, `modeling_logistic_regression`, `modeling_random_forest`, `modeling_extra_trees`, `modeling_hist_gradient_boosting`, `modeling_xgboost`, aggregate `modeling`, and `data_drift`
+- Registered pipelines: `preprocessing`, `modeling_logistic_regression`, `modeling_random_forest`, `modeling_extra_trees`, `modeling_hist_gradient_boosting`, `modeling_xgboost`, aggregate `modeling` (all reproducible refits), opt-in `tuning` plus per-model `tuning_random_forest`, `tuning_extra_trees`, `tuning_hist_gradient_boosting`, `tuning_xgboost`, and `data_drift`
 - Persisted modeling outputs:
   - `logistic_regression_model.pkl`: prediction-ready baseline bundle containing fitted learned preprocessing and the trained LogisticRegression estimator
   - `{random_forest,extra_trees,hist_gradient_boosting,xgboost}_model.pkl`: prediction-ready Optuna-selected bundles containing fitted learned preprocessing and the trained estimator
   - `{model_name}_selected_features.pkl`: model-specific final selected feature lists
-  - `{random_forest,extra_trees,hist_gradient_boosting,xgboost}_best_params.pkl`: selected tuned hyperparameters used for final refit
+  - `{random_forest,extra_trees,hist_gradient_boosting,xgboost}_best_params.pkl`: locked tuned hyperparameters the reproducible `modeling` pipeline refits from (rewritten only by the opt-in `tuning` pipeline)
   - `{model_name}_cv_metrics.csv`: one-row CV summary metric tables
   - `{model_name}_cv_fold_metrics.csv`: per-fold metric tables
   - `{random_forest,extra_trees,hist_gradient_boosting,xgboost}_optuna_trials.csv`: one-row-per-trial Optuna summary tables with sampled parameters and CV metrics
@@ -216,45 +217,46 @@ Feature-store artifacts:
 
 ## Explainability And Drift
 
-- The aggregate `modeling` pipeline computes SHAP values for the persisted Random Forest bundle after model comparison.
+- The aggregate `modeling` pipeline computes SHAP values for the persisted Extra Trees champion bundle after model comparison.
 - SHAP uses the bundle's fitted learned preprocessing before explaining the estimator inputs.
 - Explainability outputs:
-  - `data/08_reporting/random_forest_shap_summary.csv`
-  - `data/08_reporting/random_forest_shap_summary_plot.png`
+  - `data/08_reporting/extra_trees_shap_summary.csv`
+  - `data/08_reporting/extra_trees_shap_summary_plot.png`
 - The separate `data_drift` pipeline runs two scenarios:
   1. A sanity baseline comparing each shared `X_train` and `X_test` feature with a two-sample Kolmogorov-Smirnov test. Since both splits come from the same random split of the same dataset, this is expected to show little to no drift.
-  2. A simulated production scenario: `simulate_production_drift` perturbs the raw measurements in `X_test` with a hypothetical but realistic shift (a treatment plant changing its disinfection process: lower pH, higher chloramines, sulfate, and trihalomethanes) and recomputes the engineered features the same way training does. `evaluate_model_under_simulated_drift` then scores the persisted Random Forest bundle on this sample so the resulting metric degradation is visible directly, not just inferred from the drift report.
+  2. A simulated production scenario: `simulate_production_drift` perturbs the raw measurements in `X_test` with a hypothetical but realistic shift (a treatment plant changing its disinfection process: lower pH, higher chloramines, sulfate, and trihalomethanes) and recomputes the engineered features the same way training does. `evaluate_model_under_simulated_drift` then scores the persisted Extra Trees champion bundle on this sample so the resulting metric degradation is visible directly, not just inferred from the drift report.
 - Features with `p_value < data_drift.significance_threshold` are marked as drifted; the default threshold is `0.05`. The simulated shift amounts are configured under `data_drift.simulated_shift` in `parameters.yml`.
 - Drift outputs:
   - `data/08_reporting/drift_report.csv` (baseline X_train vs. X_test)
   - `data/08_reporting/simulated_drift_report.csv` (baseline vs. simulated production sample)
-  - `data/08_reporting/simulated_drift_metrics.csv` (Random Forest test metrics on the simulated sample, comparable to `random_forest_test_metrics.csv`)
-- The simulated drift scenario additionally requires `data/06_models/random_forest_model.pkl` and `data/03_primary/y_test.pkl`; see "Running The Pipeline" below.
+  - `data/08_reporting/simulated_drift_metrics.csv` (Extra Trees test metrics on the simulated sample, comparable to `extra_trees_test_metrics.csv`)
+- The simulated drift scenario additionally requires `data/06_models/extra_trees_model.pkl` and `data/03_primary/y_test.pkl`; see "Running The Pipeline" below.
 
 ## Running The Pipeline
 
 1. Install dependencies with `uv sync`.
 2. Run `uv run python main.py setup-data` to prepare `data/raw/water_potability.csv`.
-3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`. The default pipeline is `preprocessing + modeling`; it does not include `data_drift` (step 10 below).
+3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`. The default pipeline is `preprocessing + modeling`; it refits every model from the committed best parameters (no Optuna) so it is fast and reproducible, and it does not include `data_drift` (step 10) or `tuning` (step 11).
 4. Run only preprocessing with `uv run kedro run --pipeline preprocessing`.
 5. Run only LogisticRegression with `uv run kedro run --pipeline modeling_logistic_regression`.
-6. Run only RandomForest with `uv run kedro run --pipeline modeling_random_forest`. This runs Optuna tuning first, then refits and evaluates the selected RandomForest once on the final holdout split.
-7. Run only ExtraTrees with `uv run kedro run --pipeline modeling_extra_trees`.
+6. Run only RandomForest with `uv run kedro run --pipeline modeling_random_forest`. This refits and evaluates RandomForest from its committed best parameters (no Optuna).
+7. Run only ExtraTrees (the champion) with `uv run kedro run --pipeline modeling_extra_trees`.
 8. Run only HistGradientBoosting with `uv run kedro run --pipeline modeling_hist_gradient_boosting`.
 9. Run only XGBoost with `uv run kedro run --pipeline modeling_xgboost`.
 10. Run drift detection with `uv run kedro run --pipeline data_drift`.
-11. Inspect persisted outputs under `data/03_primary/`, `data/04_feature/`, `data/06_models/`, and `data/08_reporting/`.
-12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns` (only after running at least one modeling pipeline: `mlruns/` is gitignored and does not exist until the first local run creates it; the UI starts fine on a fresh clone but shows no experiments until then). To browse historical runs without training anything yourself, see the read-only `mlflow_snapshot/` export under "MLflow Snapshot Sharing" below instead.
-13. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
-14. Visualize the pipeline graph with `uv sync --group viz` then `uv run kedro viz run` (serves at `http://localhost:4141`). This is the optional `viz` dependency group in `pyproject.toml`, separate from the model code.
+11. (Optional, not reproducible) Re-run Optuna hyperparameter search with `uv run kedro run --pipeline tuning` (or per model, e.g. `--pipeline tuning_extra_trees`). This rewrites the committed `{model}_best_params.pkl` and Optuna trial logs; only run it when you deliberately want to re-tune, then re-run `modeling` to refresh the artifacts.
+12. Inspect persisted outputs under `data/03_primary/`, `data/04_feature/`, `data/06_models/`, and `data/08_reporting/`.
+13. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns` (only after running at least one modeling pipeline: `mlruns/` is gitignored and does not exist until the first local run creates it; the UI starts fine on a fresh clone but shows no experiments until then). To browse historical runs without training anything yourself, see the read-only `mlflow_snapshot/` export under "MLflow Snapshot Sharing" below instead.
+14. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
+15. Visualize the pipeline graph with `uv sync --group viz` then `uv run kedro viz run` (serves at `http://localhost:4141`). This is the optional `viz` dependency group in `pyproject.toml`, separate from the model code.
 
-The per-model modeling and data drift pipelines expect preprocessing artifacts: the engineered feature sets under `data/04_feature/` and the labels under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.
+The per-model modeling and data drift pipelines expect preprocessing artifacts: the engineered feature sets under `data/04_feature/` and the labels under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Extra Trees SHAP outputs; the standalone `modeling_extra_trees` pipeline does not.
 
-The `data_drift` pipeline additionally needs `data/06_models/random_forest_model.pkl` and `data/03_primary/y_test.pkl` for its simulated-drift evaluation step (`evaluate_model_under_simulated_drift_node`), which scores the trained Random Forest on a simulated production sample. Run `uv run kedro run --pipeline modeling_random_forest` (or `modeling`) first if the model artifact is missing.
+The `data_drift` pipeline additionally needs `data/06_models/extra_trees_model.pkl` and `data/03_primary/y_test.pkl` for its simulated-drift evaluation step (`evaluate_model_under_simulated_drift_node`), which scores the trained Extra Trees champion on a simulated production sample. Run `uv run kedro run --pipeline modeling_extra_trees` (or `modeling`) first if the model artifact is missing.
 
 ## Serving Predictions
 
-The API loads `data/06_models/random_forest_model.pkl` at startup. Generate that artifact with the default pipeline, aggregate `modeling` pipeline, or `modeling_random_forest` pipeline before starting the service.
+The API loads `data/06_models/extra_trees_model.pkl` at startup. Generate that artifact with the default pipeline, aggregate `modeling` pipeline, or `modeling_extra_trees` pipeline before starting the service.
 
 Run the FastAPI service locally:
 
@@ -278,30 +280,25 @@ The service listens on `http://localhost:8000` and exposes:
 
 `mlruns/` and `mlflow.db` at the repository root are **never committed**: they are gitignored and re-created fresh the first time anyone runs the modeling pipeline on their own machine. This is a hard requirement, not a style preference: a local file-store records `artifact_location` as an absolute, machine-specific path (e.g. `/Users/alexandre/Documents/mlops_project/mlruns/...`), so committing the live tracking directory and reusing it on another machine causes every artifact-logging call to fail with `PermissionError`.
 
-Instead, `mlflow_snapshot/` is a **tracked, read-only, point-in-time export**: `mlflow_snapshot/mlruns/` (file store) plus `mlflow_snapshot/mlflow.db` (migrated SQLite metadata). It exists purely so a grader or teammate can browse historical params, metrics, and tags without re-running the pipeline. Because of the same absolute-path limitation, the artifact URIs recorded inside this snapshot still point at the original author's machine: metrics, params, and tags browse fine, but resolving model files, plots, or CSVs through the MLflow UI will not work on a different machine. Treat the snapshot as a reference for numbers, not a working backend.
+Instead, `mlflow_snapshot/mlruns/` is a **tracked, read-only, point-in-time file-store export**. It exists purely so a grader or teammate can browse historical params, metrics, and tags without re-running the pipeline. Because of the same absolute-path limitation, the artifact URIs recorded inside this snapshot point at the machine that generated it: metrics, params, and tags browse fine, but resolving model files, plots, or CSVs through the MLflow UI will not work on a different machine. Treat the snapshot as a reference for numbers, not a working backend.
 
-The current snapshot was created from a local file store with:
+Browse the archived snapshot directly from the committed file store:
+
+```bash
+uv run mlflow ui --backend-store-uri ./mlflow_snapshot/mlruns
+```
+
+Open the MLflow UI URL printed and inspect the `water_potability_modeling` experiment.
+
+The migrated SQLite form (`mlflow_snapshot/mlflow.db`) is **not committed**; it is gitignored. GitHub's push protection flags it as a false-positive "Lob Test API Key" because the binary packs the metric key `test_*` immediately next to a 32-character run id (e.g. `test_accuracy<run_id>`). The file store above carries the same metrics and params and has no such false positive, so it is what we ship. If you specifically want the SQLite metadata DB locally, regenerate it from the tracked file store:
 
 ```bash
 uv run mlflow migrate-filestore \
-  --source ./mlruns \
+  --source ./mlflow_snapshot/mlruns \
   --target sqlite:///./mlflow_snapshot/mlflow.db
-cp -r ./mlruns ./mlflow_snapshot/mlruns
 ```
 
-The target database must be empty when refreshing the snapshot. If MLflow reports duplicate metric rows during migration, migrate from a temporary de-duplicated copy of `mlruns/` and leave the working `mlruns/` directory unchanged.
-
-Before committing a refreshed snapshot, run `uv run python main.py audit-mlflow-secrets --tracking-dir mlflow_snapshot/mlruns --db mlflow_snapshot/mlflow.db` and confirm it reports zero suspicious locations.
-
-To browse the archived snapshot's metrics and params:
-
-```bash
-uv run mlflow server \
-  --backend-store-uri sqlite:///mlflow_snapshot/mlflow.db \
-  --default-artifact-root ./mlflow_snapshot/mlruns
-```
-
-Open the MLflow UI URL printed by the server and inspect the `water_potability_modeling` experiment. If the installed MLflow version requires `mlflow ui` instead of `mlflow server` for local inspection, use the same `--backend-store-uri sqlite:///mlflow_snapshot/mlflow.db` value.
+If MLflow reports duplicate metric rows during migration, migrate from a temporary de-duplicated copy of the file store (this project's MLflow version writes each metric history row twice). Before refreshing the committed file-store snapshot from a new training run, run `uv run python main.py audit-mlflow-secrets --tracking-dir mlflow_snapshot/mlruns` and confirm it reports zero suspicious locations.
 
 This snapshot is not a multi-user writable backend. New local runs always go through the local, gitignored `mlruns` tracking URI; refresh the snapshot only when you want to export another point-in-time view for sharing.
 
@@ -310,10 +307,10 @@ This snapshot is not a multi-user writable backend. New local runs always go thr
 Every number, table, and plot referenced in `reports/report.md` is backed by a file already committed to this repository, so a grader can check them directly without installing anything or running the pipeline:
 
 - Model comparison table (Section 3.3): `data/08_reporting/model_comparison.csv`, and per-model detail in `data/08_reporting/{model_name}_test_metrics.csv` and `{model_name}_test_confusion_matrix.{csv,png}`.
-- SHAP feature importance (Section 3.4): `data/08_reporting/random_forest_shap_summary.csv` and `random_forest_shap_summary_plot.png`.
-- Drift baseline and simulated production scenario (Section 4.2): `data/08_reporting/drift_report.csv`, `simulated_drift_report.csv`, and `simulated_drift_metrics.csv` (compare against `random_forest_test_metrics.csv` for the before/after degradation).
+- SHAP feature importance (Section 3.4): `data/08_reporting/extra_trees_shap_summary.csv` and `extra_trees_shap_summary_plot.png`.
+- Drift baseline and simulated production scenario (Section 4.2): `data/08_reporting/drift_report.csv`, `simulated_drift_report.csv`, and `simulated_drift_metrics.csv` (compare against `extra_trees_test_metrics.csv` for the before/after degradation).
 - Trained model bundles themselves: `data/06_models/{model_name}_model.pkl`.
-- MLflow run history (params, metrics, tags, per-run artifacts) without training anything: the committed `mlflow_snapshot/` export, browsable with the `mlflow server --backend-store-uri sqlite:///mlflow_snapshot/mlflow.db` command above. Note that the live `mlflow.db` and `mlruns/` at the repository root are **not** committed (gitignored, local-only, recreated on first run); `mlflow_snapshot/mlflow.db` and `mlflow_snapshot/mlruns/` are the committed, browsable copies.
+- MLflow run history (params, metrics, tags, per-run artifacts) without training anything: the committed `mlflow_snapshot/mlruns/` file store, browsable with `mlflow ui --backend-store-uri ./mlflow_snapshot/mlruns` (see "MLflow Snapshot Sharing" above). Note that the live `mlflow.db` and `mlruns/` at the repository root are **not** committed (gitignored, local-only, recreated on first run), and the migrated `mlflow_snapshot/mlflow.db` is also gitignored (regenerate it locally from the file store if needed).
 
 ## Data Convention
 

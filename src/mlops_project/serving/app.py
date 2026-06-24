@@ -1,6 +1,6 @@
 """REST API for water potability predictions.
 
-The best-performing model (Random Forest) is loaded once at startup from its
+The best-performing model (Extra Trees) is loaded once at startup from its
 persisted ModelBundle.  Each prediction request passes the raw water quality
 measurements through the bundle, which handles imputation, scaling, and feature
 selection internally before calling the estimator.
@@ -31,7 +31,7 @@ from mlops_project.pipelines.preprocessing.nodes import _engineer_feature_frame
 
 # Loaded once in the lifespan startup hook below so every request reuses the
 # same fitted bundle instead of re-deserialising it from disk each time.
-_MODEL_PATH = Path("data/06_models/random_forest_model.pkl")
+_MODEL_PATH = Path("data/06_models/extra_trees_model.pkl")
 _model: Any = None
 
 
@@ -56,7 +56,7 @@ app = FastAPI(
     title="Water Potability API",
     description=(
         "Predicts whether a water sample is potable (safe to drink) "
-        "using a tuned Random Forest classifier trained on the Kaggle "
+        "using a tuned Extra Trees classifier trained on the Kaggle "
         "Water Potability dataset."
     ),
     version="0.1.0",
@@ -104,7 +104,7 @@ class PredictionResponse(BaseModel):
 @app.get("/health")
 def health() -> dict[str, str]:
     """Confirm the model is loaded and the API is up."""
-    return {"status": "ok", "model": "random_forest"}
+    return {"status": "ok", "model": "extra_trees"}
 
 
 @app.post("/predict", response_model=PredictionResponse)

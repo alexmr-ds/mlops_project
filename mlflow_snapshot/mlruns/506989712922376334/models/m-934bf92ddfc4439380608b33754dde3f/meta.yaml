@@ -1,0 +1,10 @@
+artifact_location: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/models/m-934bf92ddfc4439380608b33754dde3f/artifacts
+creation_timestamp: 1782342936037
+experiment_id: '506989712922376334'
+last_updated_timestamp: 1782342936165
+model_id: m-934bf92ddfc4439380608b33754dde3f
+model_type: null
+name: random_forest_model
+source_run_id: 4b83dcbd0413491e9bced5b8d3b8966a
+status: 2
+status_message: null

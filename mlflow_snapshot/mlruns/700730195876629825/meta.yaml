@@ -1,8 +1,0 @@
-artifact_location: /Users/alexandre/Documents/mlops_project/mlruns/700730195876629825
-creation_time: 1780476183560
-experiment_id: '700730195876629825'
-last_update_time: 1780476183560
-lifecycle_stage: active
-name: water_potability_modeling
-trace_location: null
-workspace: default

@@ -14,6 +14,8 @@ from mlops_project.pipelines.modeling import create_logistic_regression_pipeline
 from mlops_project.pipelines.modeling import create_pipeline
 from mlops_project.pipelines.modeling import create_random_forest_pipeline
 from mlops_project.pipelines.modeling import create_xgboost_pipeline
+from mlops_project.pipelines.modeling import create_tuning_pipeline
+from mlops_project.pipelines.modeling import create_tuning_random_forest_pipeline
 
 LOGISTIC_REGRESSION_NODE_NAMES = [
     'cross_validate_and_train_logistic_regression_node',
@@ -21,31 +23,31 @@ LOGISTIC_REGRESSION_NODE_NAMES = [
     'log_model_to_mlflow_node',
 ]
 RANDOM_FOREST_NODE_NAMES = [
-    'tune_random_forest_hyperparameters_node',
+    'cross_validate_random_forest_with_best_params_node',
     'train_evaluate_random_forest_with_best_params_node',
     'create_random_forest_test_confusion_matrix_plot_node',
     'log_random_forest_to_mlflow_node',
 ]
 EXTRA_TREES_NODE_NAMES = [
-    'tune_extra_trees_hyperparameters_node',
+    'cross_validate_extra_trees_with_best_params_node',
     'train_evaluate_extra_trees_with_best_params_node',
     'create_extra_trees_test_confusion_matrix_plot_node',
     'log_extra_trees_to_mlflow_node',
 ]
 HIST_GRADIENT_BOOSTING_NODE_NAMES = [
-    'tune_hist_gradient_boosting_hyperparameters_node',
+    'cross_validate_hist_gradient_boosting_with_best_params_node',
     'train_evaluate_hist_gradient_boosting_with_best_params_node',
     'create_hist_gradient_boosting_test_confusion_matrix_plot_node',
     'log_hist_gradient_boosting_to_mlflow_node',
 ]
 XGBOOST_NODE_NAMES = [
-    'tune_xgboost_hyperparameters_node',
+    'cross_validate_xgboost_with_best_params_node',
     'train_evaluate_xgboost_with_best_params_node',
     'create_xgboost_test_confusion_matrix_plot_node',
     'log_xgboost_to_mlflow_node',
 ]
 COMPARISON_NODE_NAMES = ['build_model_comparison_node']
-SHAP_NODE_NAMES = ['compute_random_forest_shap_values_node']
+SHAP_NODE_NAMES = ['compute_extra_trees_shap_values_node']
 
 
 class ModelingPipelineTests(unittest.TestCase):
@@ -85,10 +87,10 @@ class ModelingPipelineTests(unittest.TestCase):
     def test_create_random_forest_pipeline_exposes_expected_nodes(self) -> None:
         pipeline = create_random_forest_pipeline()
         node_names = [pipeline_node.name for pipeline_node in pipeline.nodes]
-        random_forest_tuning_node = next(
+        random_forest_cv_node = next(
             pipeline_node
             for pipeline_node in pipeline.nodes
-            if pipeline_node.name == 'tune_random_forest_hyperparameters_node'
+            if pipeline_node.name == 'cross_validate_random_forest_with_best_params_node'
         )
         random_forest_train_node = next(
             pipeline_node
@@ -102,14 +104,14 @@ class ModelingPipelineTests(unittest.TestCase):
         )
 
         self.assertCountEqual(node_names, RANDOM_FOREST_NODE_NAMES)
+        # The reproducible default refits from locked params, so best_params is a
+        # free input here (produced by the opt-in tuning pipeline), not an output.
+        self.assertIn('random_forest_best_params', random_forest_cv_node.inputs)
         self.assertListEqual(
-            list(random_forest_tuning_node.outputs),
+            list(random_forest_cv_node.outputs),
             [
-                'random_forest_best_params',
                 'random_forest_cv_metrics',
                 'random_forest_cv_fold_metrics',
-                'random_forest_optuna_trials',
-                'random_forest_optuna_fold_metrics',
             ],
         )
         self.assertListEqual(
@@ -128,6 +130,9 @@ class ModelingPipelineTests(unittest.TestCase):
         self.assertIn('random_forest_best_params', random_forest_log_node.inputs)
         self.assertIn('random_forest_optuna_trials', random_forest_log_node.inputs)
         self.assertIn('random_forest_optuna_fold_metrics', random_forest_log_node.inputs)
+        # best_params / optuna logs are inputs to the refit pipeline, never outputs.
+        self.assertNotIn('random_forest_best_params', pipeline.outputs())
+        self.assertNotIn('random_forest_optuna_trials', pipeline.outputs())
 
     def test_create_new_tree_pipelines_expose_expected_nodes(self) -> None:
         cases = [
@@ -147,10 +152,11 @@ class ModelingPipelineTests(unittest.TestCase):
         for model_name, model_pipeline, expected_node_names in cases:
             with self.subTest(model_name=model_name):
                 node_names = [pipeline_node.name for pipeline_node in model_pipeline.nodes]
-                tuning_node = next(
+                cv_node = next(
                     pipeline_node
                     for pipeline_node in model_pipeline.nodes
-                    if pipeline_node.name == f'tune_{model_name}_hyperparameters_node'
+                    if pipeline_node.name
+                    == f'cross_validate_{model_name}_with_best_params_node'
                 )
                 train_node = next(
                     pipeline_node
@@ -165,14 +171,12 @@ class ModelingPipelineTests(unittest.TestCase):
                 )
 
                 self.assertCountEqual(node_names, expected_node_names)
+                self.assertIn(f'{model_name}_best_params', cv_node.inputs)
                 self.assertListEqual(
-                    list(tuning_node.outputs),
+                    list(cv_node.outputs),
                     [
-                        f'{model_name}_best_params',
                         f'{model_name}_cv_metrics',
                         f'{model_name}_cv_fold_metrics',
-                        f'{model_name}_optuna_trials',
-                        f'{model_name}_optuna_fold_metrics',
                     ],
                 )
                 self.assertListEqual(
@@ -191,6 +195,41 @@ class ModelingPipelineTests(unittest.TestCase):
                 self.assertIn(f'{model_name}_best_params', log_node.inputs)
                 self.assertIn(f'{model_name}_optuna_trials', log_node.inputs)
                 self.assertIn(f'{model_name}_optuna_fold_metrics', log_node.inputs)
+
+    def test_tuning_pipeline_produces_best_params_and_optuna_logs(self) -> None:
+        pipeline = create_tuning_random_forest_pipeline()
+        node_names = [pipeline_node.name for pipeline_node in pipeline.nodes]
+        tune_node = next(
+            pipeline_node
+            for pipeline_node in pipeline.nodes
+            if pipeline_node.name == 'tune_random_forest_hyperparameters_node'
+        )
+
+        self.assertEqual(node_names, ['tune_random_forest_hyperparameters_node'])
+        self.assertListEqual(
+            list(tune_node.outputs),
+            [
+                'random_forest_best_params',
+                'random_forest_cv_metrics',
+                'random_forest_cv_fold_metrics',
+                'random_forest_optuna_trials',
+                'random_forest_optuna_fold_metrics',
+            ],
+        )
+
+    def test_aggregate_tuning_pipeline_covers_every_tuned_model(self) -> None:
+        pipeline = create_tuning_pipeline()
+        node_names = {pipeline_node.name for pipeline_node in pipeline.nodes}
+
+        self.assertEqual(
+            node_names,
+            {
+                'tune_random_forest_hyperparameters_node',
+                'tune_extra_trees_hyperparameters_node',
+                'tune_hist_gradient_boosting_hyperparameters_node',
+                'tune_xgboost_hyperparameters_node',
+            },
+        )
 
     def test_create_pipeline_exposes_all_modeling_nodes(self) -> None:
         pipeline = create_pipeline()

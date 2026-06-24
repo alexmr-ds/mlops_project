@@ -14,6 +14,7 @@ def register_pipelines() -> dict[str, Pipeline]:
     hist_gradient_boosting_pipeline = modeling.create_hist_gradient_boosting_pipeline()
     xgboost_pipeline = modeling.create_xgboost_pipeline()
     modeling_pipeline = modeling.create_pipeline()
+    tuning_pipeline = modeling.create_tuning_pipeline()
     data_drift_pipeline = data_drift.create_pipeline()
     return {
         "preprocessing": preprocessing_pipeline,
@@ -23,6 +24,11 @@ def register_pipelines() -> dict[str, Pipeline]:
         "modeling_hist_gradient_boosting": hist_gradient_boosting_pipeline,
         "modeling_xgboost": xgboost_pipeline,
         "modeling": modeling_pipeline,
+        "tuning": tuning_pipeline,
+        "tuning_random_forest": modeling.create_tuning_random_forest_pipeline(),
+        "tuning_extra_trees": modeling.create_tuning_extra_trees_pipeline(),
+        "tuning_hist_gradient_boosting": modeling.create_tuning_hist_gradient_boosting_pipeline(),
+        "tuning_xgboost": modeling.create_tuning_xgboost_pipeline(),
         "data_drift": data_drift_pipeline,
         "__default__": preprocessing_pipeline + modeling_pipeline,
     }

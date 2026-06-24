@@ -123,7 +123,7 @@ class HealthEndpointTests(unittest.TestCase):
     def test_health_returns_ok_status_and_model_name(self) -> None:
         response = serving_app.health()
 
-        self.assertEqual(response, {"status": "ok", "model": "random_forest"})
+        self.assertEqual(response, {"status": "ok", "model": "extra_trees"})
 
 
 class LoadModelTests(unittest.TestCase):

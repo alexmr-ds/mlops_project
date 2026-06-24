@@ -1,0 +1,23 @@
+artifact_path: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/models/m-09cac02197f44dd4b56e7edfc22a98e6/artifacts
+flavors:
+  python_function:
+    artifacts:
+      model_bundle:
+        path: artifacts/model_bundle.pkl
+        uri: /var/folders/91/np610d0s2kq3t3kpltqrl7b40000gn/T/tmp2rz98moe/model_bundle.pkl
+    cloudpickle_version: 3.1.2
+    code: null
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: 3.13.13
+    streamable: false
+mlflow_version: 3.12.0
+model_id: m-09cac02197f44dd4b56e7edfc22a98e6
+model_size_bytes: 1048125
+model_uuid: m-09cac02197f44dd4b56e7edfc22a98e6
+prompts: null
+run_id: 6a7942dd683945048d23c95769bf7930
+utc_time_created: '2026-06-24 23:15:36.266832'

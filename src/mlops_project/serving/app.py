@@ -15,6 +15,8 @@ With Docker:
 from __future__ import annotations
 
 import pickle
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +48,13 @@ def _load_model() -> Any:
         return pickle.load(f)
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    global _model
+    _model = _load_model()
+    yield
+
+
 app = FastAPI(
     title="Water Potability API",
     description=(
@@ -54,13 +63,8 @@ app = FastAPI(
         "Water Potability dataset."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    global _model
-    _model = _load_model()
 
 
 # ---------------------------------------------------------------------------

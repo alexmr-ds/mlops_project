@@ -47,6 +47,10 @@ In the final sprint we added the three production-readiness components. SHAP exp
 
 **Deliverable:** SHAP summary plot, `data/08_reporting/drift_report.csv` and `simulated_drift_report.csv`, `Dockerfile`, `docker-compose.yml`, and this report.
 
+### Pipeline Structure
+
+The brief's reference layout splits work into seven granular pipelines (`data_quality`, `data_cleaning`, `data_feat_engineering`, `data_split`, `model_train`, `model_selection`, `model_predict`), described as a preference rather than a requirement. We consolidated into three Kedro pipelines — `preprocessing` (validation through feature engineering and splitting), `modeling` (training, tuning, evaluation, and MLflow logging for all five model families), and `data_drift` — because our preprocessing steps share a single fitted state per CV fold (imputer, scaler, RFECV selector) that has to move through validation, cleaning, and feature engineering as one unit to stay leakage-safe; splitting it into separate pipelines would mean re-loading and re-serialising that state between stages for no benefit. Each pipeline can still be run independently (`kedro run --pipeline=data_drift`), which is the property the brief's structure is actually aiming for.
+
 ---
 
 ## 3. Data Exploration and Modelling Results
@@ -80,6 +84,8 @@ All models were evaluated with 5-fold stratified cross-validation on the trainin
 | 5 | Logistic Regression | 0.132 ± 0.076 | 0.551 | 0.136 |
 
 Random Forest achieves the highest CV F1 (0.476) and the highest test ROC-AUC (0.678), clearing both success thresholds from Section 1. The logistic regression baseline, while stable (low CV std), is far behind the tree models, confirming the relationship between water quality and potability is not well captured by a linear boundary. Extra Trees shows high variance across folds (std 0.117) despite a reasonable test AUC, suggesting it generalised less reliably than the other ensembles.
+
+It is worth being direct about what "clearing the thresholds" means here: a ROC-AUC of 0.678 and an accuracy of 0.638 are real but modest — closer to "somewhat better than a coin flip" than to a deployable diagnostic tool, and the same pattern holds for every model family we tried, not just ours. This is consistent with how the dataset is known to behave: the Kaggle Water Potability dataset's labels are synthetically generated and only weakly tied to the nine physicochemical features, so even an ideal classifier cannot push performance much further without additional, more informative measurements. We set the thresholds in Section 1 specifically at a level that separates "the model learned a real, non-trivial signal" from "the model is guessing" — Random Forest clears that bar, but readers should not mistake it for a clinically usable potability test. The honest conclusion is that the production-readiness work in Section 4 (serving, drift monitoring, retraining triggers) is the more transferable outcome of this project than the absolute accuracy of the classifier itself.
 
 ![Random Forest test confusion matrix](../data/08_reporting/random_forest_test_confusion_matrix.png)
 

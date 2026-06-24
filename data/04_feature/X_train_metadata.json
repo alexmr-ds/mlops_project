@@ -1,0 +1,202 @@
+{
+  "name": "X_train",
+  "version": "bb9d685f6e5c.776034082047",
+  "schema_version": "bb9d685f6e5c",
+  "snapshot_version": "776034082047",
+  "row_count": 2784,
+  "feature_count": 32,
+  "columns": [
+    {
+      "name": "ph",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "pH level of the water sample on the 0-14 scale."
+    },
+    {
+      "name": "Hardness",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Hardness from dissolved calcium and magnesium salts (mg/L)."
+    },
+    {
+      "name": "Solids",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Total dissolved solids (ppm)."
+    },
+    {
+      "name": "Chloramines",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Chloramine disinfectant concentration (ppm)."
+    },
+    {
+      "name": "Sulfate",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Dissolved sulfate concentration (mg/L)."
+    },
+    {
+      "name": "Conductivity",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Electrical conductivity of the water (uS/cm)."
+    },
+    {
+      "name": "Organic_carbon",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Total organic carbon content (ppm)."
+    },
+    {
+      "name": "Trihalomethanes",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Trihalomethane disinfection by-product concentration (ug/L)."
+    },
+    {
+      "name": "Turbidity",
+      "dtype": "float64",
+      "group": "raw_measurement",
+      "description": "Water cloudiness from suspended solids (NTU)."
+    },
+    {
+      "name": "conductivity_solids_ratio",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Conductivity divided by total dissolved solids."
+    },
+    {
+      "name": "turbidity_solids_ratio",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Turbidity divided by total dissolved solids."
+    },
+    {
+      "name": "hardness_conductivity_ratio",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Hardness divided by conductivity."
+    },
+    {
+      "name": "hardness_solids_ratio",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Hardness divided by total dissolved solids."
+    },
+    {
+      "name": "sulfate_hardness_ratio",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Sulfate divided by hardness."
+    },
+    {
+      "name": "tds_conductivity_ratio",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Total dissolved solids divided by conductivity."
+    },
+    {
+      "name": "chloramines_ph_interaction",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Chloramines multiplied by pH."
+    },
+    {
+      "name": "ph_hardness_interaction",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "pH multiplied by hardness."
+    },
+    {
+      "name": "organic_trihalo_interaction",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Organic carbon multiplied by trihalomethanes."
+    },
+    {
+      "name": "turbidity_organic_interaction",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Turbidity multiplied by organic carbon."
+    },
+    {
+      "name": "trihalo_formation_risk",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Organic carbon divided by trihalomethanes as a formation-potential proxy."
+    },
+    {
+      "name": "disinfection_stress",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Sum of sulfate and chloramines."
+    },
+    {
+      "name": "dbp_precursor_load",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Organic carbon plus one tenth of trihalomethanes."
+    },
+    {
+      "name": "total_oxidant_stress",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Chloramines plus one tenth of sulfate."
+    },
+    {
+      "name": "solids_sulfate_diff",
+      "dtype": "float64",
+      "group": "engineered",
+      "description": "Total dissolved solids minus sulfate."
+    },
+    {
+      "name": "turbidity_trihalo_risk",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "Binary flag: turbidity above 5 and trihalomethanes above 80."
+    },
+    {
+      "name": "risk_score",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "Count of exceeded WHO-style safety thresholds (0-5)."
+    },
+    {
+      "name": "expanded_risk_score",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "risk_score plus three additional threshold exceedances."
+    },
+    {
+      "name": "ph_safe_range",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "Binary flag: pH within the safe 6.5-8.5 range."
+    },
+    {
+      "name": "high_turbidity",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "Binary flag: turbidity above 5."
+    },
+    {
+      "name": "high_sulfate",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "Binary flag: sulfate above 250."
+    },
+    {
+      "name": "high_chloramines",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "Binary flag: chloramines above 4."
+    },
+    {
+      "name": "high_hardness",
+      "dtype": "int64",
+      "group": "engineered",
+      "description": "Binary flag: hardness above 200."
+    }
+  ]
+}

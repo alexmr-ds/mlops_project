@@ -31,9 +31,9 @@ We started by exploring the dataset in `notebooks/EDA.ipynb` to understand featu
 
 ### Sprint 2: Preprocessing Pipeline (Week 2)
 
-With the data contract in place, we built the full Kedro preprocessing pipeline: stratified 70/15/15 splitting, deterministic feature engineering (23 derived features from domain knowledge), training-only outlier removal, fold-local mean imputation and standard scaling, and RFECV-based feature selection. The key architectural decision was to move all learned preprocessing inside each CV fold rather than fitting it once on the full training set, which eliminates any leakage of validation statistics into the feature transformation.
+With the data contract in place, we built the full Kedro preprocessing pipeline: stratified 85/15 train/test splitting, deterministic feature engineering (23 derived features from domain knowledge), training-only outlier removal, fold-local mean imputation and standard scaling, and RFECV-based feature selection. The key architectural decision was to move all learned preprocessing inside each CV fold rather than fitting it once on the full training set, which eliminates any leakage of validation statistics into the feature transformation.
 
-**Deliverable:** `src/mlops_project/pipelines/preprocessing/`, 36 unit tests, and persisted `X_train.pkl`, `X_test.pkl`, `y_train.pkl`, `y_test.pkl`.
+**Deliverable:** `src/mlops_project/pipelines/preprocessing/`, 26 unit tests, and persisted `X_train.pkl`, `X_test.pkl`, `y_train.pkl`, `y_test.pkl`.
 
 ### Sprint 3: Modelling, Tuning, and MLflow (Weeks 3-4)
 
@@ -49,7 +49,7 @@ In the final sprint we added the three production-readiness components. SHAP exp
 
 ### Pipeline Structure
 
-The brief's reference layout splits work into seven granular pipelines (`data_quality`, `data_cleaning`, `data_feat_engineering`, `data_split`, `model_train`, `model_selection`, `model_predict`), described as a preference rather than a requirement. We consolidated into three Kedro pipelines instead: `preprocessing` (validation through feature engineering and splitting), `modeling` (training, tuning, evaluation, and MLflow logging for all five model families), and `data_drift`. The reason is that our preprocessing steps share a single fitted state per CV fold (imputer, scaler, RFECV selector) that has to move through validation, cleaning, and feature engineering as one unit to stay leakage-safe; splitting it into separate pipelines would mean re-loading and re-serialising that state between stages for no benefit. Each pipeline can still be run independently (`kedro run --pipeline=data_drift`), which is the property the brief's structure is actually aiming for.
+The brief's reference layout splits work into seven granular pipelines (`data_quality`, `data_cleaning`, `data_feat_engineering`, `data_split`, `model_train`, `model_selection`, `model_predict`), described as a preference rather than a requirement. We consolidated into three Kedro pipelines instead: `preprocessing` (validation through feature engineering and splitting), `modeling` (training, tuning, evaluation, and MLflow logging for all five model families), and `data_drift`. The reason is that our preprocessing steps share a single fitted state per CV fold (imputer, scaler, RFECV selector) that has to move through validation, cleaning, and feature engineering as one unit to stay leakage-safe; splitting it into separate pipelines would mean re-loading and re-serialising that state between stages for no benefit. Each pipeline can still be run independently (`kedro run --pipeline data_drift`), which is the property the brief's structure is actually aiming for.
 
 ---
 
@@ -70,6 +70,8 @@ The EDA revealed three important characteristics of the dataset, visible in the 
 ### 3.2 Feature Engineering
 
 We constructed 23 additional features from domain knowledge: ratio features (e.g., `conductivity_solids_ratio`), interaction terms (e.g., `chloramines_ph_interaction`), additive composites (e.g., `disinfection_stress = Sulfate + Chloramines`), and binary risk flags based on WHO guidelines. RFECV then selected the subset of these 32 features that improved cross-validated ROC-AUC.
+
+These 32 features are materialised into a small file-based feature store under `data/04_feature/` (`mlops_project.feature_store`). A single registry defines every feature's name, dtype, group, and description, and each materialised feature set is written with a content-addressable metadata sidecar recording a schema version and a data-snapshot version. This gives the engineered features a versioned, self-describing contract that training, drift detection, and the test suite all read back through one retrieval API, while the leakage-sensitive learned preprocessing stays out of the store and is re-fitted per fold.
 
 ### 3.3 Model Comparison
 
@@ -105,7 +107,7 @@ pH dominates, consistent with domain knowledge: it is the single most commonly m
 
 ### 4.1 Technology Choices and Their Advantages
 
-**Kedro** structures the project as a directed acyclic graph of named nodes, with every intermediate dataset catalogued in a single YAML file. This makes it trivial to rerun any subset of the pipeline in isolation (`kedro run --pipeline=data_drift`) and ensures every experiment starts from a reproducible state, instead of a series of scripts with implicit, hard-to-audit dependencies.
+**Kedro** structures the project as a directed acyclic graph of named nodes, with every intermediate dataset catalogued in a single YAML file. This makes it trivial to rerun any subset of the pipeline in isolation (`kedro run --pipeline data_drift`) and ensures every experiment starts from a reproducible state, instead of a series of scripts with implicit, hard-to-audit dependencies.
 
 **MLflow** provides experiment tracking that goes beyond saving the best model: every CV run, Optuna trial, and holdout evaluation is logged with its exact hyperparameters, metrics, and artifacts, creating a full audit trail we could use to roll back to an earlier model.
 
@@ -143,7 +145,7 @@ The project uses Python 3.13 and manages dependencies with uv. The table below l
 | great-expectations | 1.17.2 | Raw data contract validation |
 | shap | 0.52.0 | Feature importance (SHAP values) |
 | fastapi | 0.136.1 | REST API for model serving |
-| uvicorn | 0.34.x | ASGI server for FastAPI |
+| uvicorn | 0.47.0 | ASGI server for FastAPI |
 | matplotlib | 3.10.9 | Confusion matrix and SHAP plots |
 | kaggle | 2.1.2 | Dataset download |
 | pytest | 9.0.3 | Unit and integration testing |

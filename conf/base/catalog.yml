@@ -18,11 +18,11 @@ X_test_engineered:
   type: kedro.io.MemoryDataset
 
 X_train:
-  type: mlops_project.datasets.PickleDataset
-  filepath: data/03_primary/X_train.pkl
+  type: mlops_project.datasets.FeatureSetDataset
+  filepath: data/04_feature/X_train.pkl
 X_test:
-  type: mlops_project.datasets.PickleDataset
-  filepath: data/03_primary/X_test.pkl
+  type: mlops_project.datasets.FeatureSetDataset
+  filepath: data/04_feature/X_test.pkl
 y_train:
   type: mlops_project.datasets.PickleDataset
   filepath: data/03_primary/y_train.pkl
@@ -227,8 +227,8 @@ drift_report:
   filepath: data/08_reporting/drift_report.csv
 
 simulated_X_test:
-  type: mlops_project.datasets.PickleDataset
-  filepath: data/03_primary/simulated_X_test.pkl
+  type: mlops_project.datasets.FeatureSetDataset
+  filepath: data/04_feature/simulated_X_test.pkl
 
 simulated_drift_report:
   type: mlops_project.datasets.PandasCSVDataset

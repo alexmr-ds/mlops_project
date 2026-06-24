@@ -48,7 +48,8 @@ If you would rather inspect what is already committed than run anything yourself
 │   └── local/                                     - Local Kedro environment directory required by the default config loader.
 ├── data/
 │   ├── raw/                                       - Water potability source CSV used by preprocessing.
-│   ├── 03_primary/                                - Persisted engineered train/test features and labels.
+│   ├── 03_primary/                                - Persisted train/test labels (y_train, y_test).
+│   ├── 04_feature/                                - File-based feature store: engineered feature sets plus versioned metadata sidecars.
 │   ├── 06_models/                                 - Persisted prediction-ready model bundles, selected features, and tuned parameters.
 │   └── 08_reporting/                              - Persisted metrics, plots, SHAP summaries, drift results, and MLflow run metadata.
 ├── docs/
@@ -71,7 +72,8 @@ If you would rather inspect what is already committed than run anything yourself
 │   └── mlops_project/
 │       ├── __init__.py                            - Kedro project package marker.
 │       ├── data_setup.py                          - Interactive Kaggle credential bootstrap and dataset download helper.
-│       ├── datasets.py                            - Local Kedro dataset implementations for CSV, pickle, and matplotlib figure persistence.
+│       ├── datasets.py                            - Local Kedro dataset implementations for CSV, pickle, feature-store, and matplotlib figure persistence.
+│       ├── feature_store.py                       - File-based feature store: feature definitions registry, content-addressable versioning, and offline retrieval API.
 │       ├── mlflow_secret_audit.py                 - Secret-like content audit helpers for local MLflow file and SQLite stores.
 │       ├── modeling/
 │       │   ├── __init__.py                        - Reusable modeling component package marker.
@@ -141,7 +143,7 @@ If you would rather inspect what is already committed than run anything yourself
    - set file permissions to `600`
 4. The script then downloads `adityakadiwal/water-potability` into local `data/raw/`.
 
-The repository currently includes a committed point-in-time snapshot of the raw dataset and generated artifacts under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`. Pipeline runs may replace these files or add new generated outputs; review those changes before committing another snapshot.
+The repository currently includes a committed point-in-time snapshot of the raw dataset and generated artifacts under `data/03_primary/`, `data/04_feature/`, `data/06_models/`, and `data/08_reporting/`. Pipeline runs may replace these files or add new generated outputs; review those changes before committing another snapshot.
 
 `mlruns/` and `mlflow.db` at the repository root are **always local and gitignored**. Every machine gets its own fresh copy the first time it logs an MLflow run, because a file-store `artifact_location` is recorded as an absolute, machine-specific path and can never be safely shared between machines. The shareable, point-in-time export instead lives under the tracked `mlflow_snapshot/` directory; see "MLflow Snapshot Sharing" below.
 
@@ -163,8 +165,21 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 - Learned preprocessing is intentionally no longer fit in the preprocessing pipeline. `mlops_project.modeling.preprocessing.ModelPreprocessor` fits outlier filtering, imputation, scaling, and RFECV feature selection inside each cross-validation fold and inside the final full-training refit to avoid leakage. The final fitted preprocessing stack is persisted with each model bundle.
 - Model-ready feature validation: Great Expectations validates transformed estimator inputs after learned preprocessing for non-empty rows, exact selected feature columns and order, numeric values, and no nulls; pandas/numpy checks reject infinite feature values and invalid filtered-label alignment before estimator fitting or prediction.
 - Persisted outputs:
-  - `X_train.pkl`, `X_test.pkl`: engineered feature matrices before learned preprocessing
-  - `y_train.pkl`, `y_test.pkl`: split labels
+  - `data/04_feature/X_train.pkl`, `data/04_feature/X_test.pkl`: engineered feature matrices before learned preprocessing, materialised into the feature store with versioned metadata sidecars (see "Feature Store")
+  - `data/03_primary/y_train.pkl`, `data/03_primary/y_test.pkl`: split labels
+
+## Feature Store
+
+The engineered feature matrices are materialised into a small file-based feature store under `data/04_feature/` rather than being treated as anonymous pickles. This is an own-solution feature store (no third-party service required) defined in `mlops_project.feature_store`:
+
+- **Feature definitions registry**: `FEATURE_DEFINITIONS` is the single source of truth for every feature's name, dtype, group (`raw_measurement` or `engineered`), and human-readable description. A contract test (`tests/test_feature_store.py`) asserts the registry stays exactly in sync with the columns produced by `_engineer_feature_frame`, so the schema and the engineering code can never silently diverge.
+- **Content-addressable versioning**: each materialised feature set is written by the `FeatureSetDataset` Kedro dataset together with a deterministic `<name>_metadata.json` sidecar. The metadata records a `schema_version` (hash of names plus dtypes) and a `snapshot_version` (hash of the data), combined into a single `version`. It carries no wall-clock timestamp on purpose, so re-running the pipeline on the same inputs reproduces byte-identical metadata.
+- **Offline retrieval API**: `feature_store.load_offline_features("X_train")` returns the feature frame together with its metadata, the same way training, drift detection, and tests read features back from the store.
+- **Scope boundary**: only the deterministic engineered features live here. The fold-local learned preprocessing (outlier filtering, imputation, scaling, RFECV) is deliberately never stored in the feature store because it must be re-fitted inside each CV fold to stay leakage-safe; it is persisted instead inside each model bundle.
+
+Feature-store artifacts:
+- `data/04_feature/{X_train,X_test,simulated_X_test}.pkl`: materialised feature sets
+- `data/04_feature/{X_train,X_test,simulated_X_test}_metadata.json`: feature definitions, schema, and version for each set
 
 ## Modeling Behavior
 
@@ -228,12 +243,12 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 8. Run only HistGradientBoosting with `uv run kedro run --pipeline modeling_hist_gradient_boosting`.
 9. Run only XGBoost with `uv run kedro run --pipeline modeling_xgboost`.
 10. Run drift detection with `uv run kedro run --pipeline data_drift`.
-11. Inspect persisted outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
+11. Inspect persisted outputs under `data/03_primary/`, `data/04_feature/`, `data/06_models/`, and `data/08_reporting/`.
 12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns` (only after running at least one modeling pipeline: `mlruns/` is gitignored and does not exist until the first local run creates it; the UI starts fine on a fresh clone but shows no experiments until then). To browse historical runs without training anything yourself, see the read-only `mlflow_snapshot/` export under "MLflow Snapshot Sharing" below instead.
 13. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
 14. Visualize the pipeline graph with `uv sync --group viz` then `uv run kedro viz run` (serves at `http://localhost:4141`). This is the optional `viz` dependency group in `pyproject.toml`, separate from the model code.
 
-The per-model modeling and data drift pipelines expect preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.
+The per-model modeling and data drift pipelines expect preprocessing artifacts: the engineered feature sets under `data/04_feature/` and the labels under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.
 
 The `data_drift` pipeline additionally needs `data/06_models/random_forest_model.pkl` and `data/03_primary/y_test.pkl` for its simulated-drift evaluation step (`evaluate_model_under_simulated_drift_node`), which scores the trained Random Forest on a simulated production sample. Run `uv run kedro run --pipeline modeling_random_forest` (or `modeling`) first if the model artifact is missing.
 

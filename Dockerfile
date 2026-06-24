@@ -8,17 +8,19 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv==0.7.12
 
 COPY pyproject.toml uv.lock ./
-# Install only production dependencies (no dev extras) into the system Python
-RUN uv sync --no-dev --no-editable --system
+# Install only production dependencies (no dev extras) into a project-local
+# .venv, exactly as the locked uv.lock resolved them.
+RUN uv sync --no-dev --no-editable --frozen
 
 # ---------------------------------------------------------------------------
 FROM python:3.13-slim AS runtime
 
 WORKDIR /app
 
-# Copy installed packages from the builder stage
-COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
-COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
+# uv sync always installs into .venv (there is no system-site-packages mode),
+# so copy the whole virtual environment rather than system site-packages.
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:${PATH}"
 
 # Copy project source and the persisted Random Forest model bundle
 COPY src/ ./src/

@@ -63,8 +63,8 @@ Current scope: an end-to-end Kedro MLOps proof of concept for the water potabili
 │           ├── __init__.py                        - Pipeline namespace package.
 │           ├── data_drift/
 │           │   ├── __init__.py                    - Re-exports the data drift pipeline factory.
-│           │   ├── nodes.py                       - Two-sample KS feature-drift calculations and report construction.
-│           │   └── pipeline.py                    - Kedro node graph for comparing train and test feature distributions.
+│           │   ├── nodes.py                       - Two-sample KS feature-drift calculations, simulated production drift sampling, and Random Forest evaluation under simulated drift.
+│           │   └── pipeline.py                    - Kedro node graph for the train/test drift baseline and the simulated production drift scenario.
 │           ├── modeling/
 │           │   ├── __init__.py                    - Re-exports the modeling pipeline factory.
 │           │   ├── nodes.py                       - Kedro adapters for modeling, comparison, MLflow, confusion-matrix, and SHAP workflows.
@@ -81,24 +81,27 @@ Current scope: an end-to-end Kedro MLOps proof of concept for the water potabili
     ├── __init__.py                                - Test package marker.
     ├── test_data_setup.py                         - Unit tests for interactive credential bootstrap, dataset download, and CLI behavior.
     ├── test_mlflow_secret_audit.py                - Unit tests for MLflow secret scanning across `mlruns/` files and `mlflow.db`.
-    └── pipelines/
-        ├── __init__.py                            - Pipeline test package marker.
-        ├── data_drift/
-        │   ├── __init__.py                        - Data drift test package marker.
-        │   └── test_nodes.py                      - Unit tests for KS statistics, thresholds, report shape, and drift flags.
-        ├── modeling/
-        │   ├── __init__.py                        - Modeling test package marker.
-        │   ├── test_explainability.py             - Unit tests for SHAP output shape, ordering, values, and plots.
-        │   ├── test_nodes.py                      - Unit tests for cross-validated LogisticRegression training, tuned tree-based models, model bundles, final testing, plotting, comparison reports, and MLflow logging behavior.
-        │   ├── test_optimization.py               - Unit tests for shared tree-based model optimization helper behavior.
-        │   ├── test_pipeline.py                   - Unit tests for modeling pipeline assembly.
-        │   ├── test_preprocessing.py              - Unit tests for leakage-safe model-local learned preprocessing.
-        │   └── test_validation.py                 - Unit tests for model-ready feature and filtered-label validation contracts.
-        └── preprocessing/
-            ├── __init__.py                        - Preprocessing test package marker.
-            ├── test_nodes.py                      - Unit tests for split and deterministic feature-engineering behavior.
-            ├── test_pipeline.py                   - Unit tests for preprocessing pipeline assembly and registry composition.
-            └── test_validation.py                 - Unit tests for fail-fast raw data and modeling input validation contracts.
+    ├── pipelines/
+    │   ├── __init__.py                            - Pipeline test package marker.
+    │   ├── data_drift/
+    │   │   ├── __init__.py                        - Data drift test package marker.
+    │   │   └── test_nodes.py                      - Unit tests for KS statistics, thresholds, report shape, drift flags, simulated production drift sampling, and Random Forest evaluation under simulated drift.
+    │   ├── modeling/
+    │   │   ├── __init__.py                        - Modeling test package marker.
+    │   │   ├── test_explainability.py             - Unit tests for SHAP output shape, ordering, values, and plots.
+    │   │   ├── test_nodes.py                      - Unit tests for cross-validated LogisticRegression training, tuned tree-based models, model bundles, final testing, plotting, comparison reports, and MLflow logging behavior.
+    │   │   ├── test_optimization.py               - Unit tests for shared tree-based model optimization helper behavior.
+    │   │   ├── test_pipeline.py                   - Unit tests for modeling pipeline assembly.
+    │   │   ├── test_preprocessing.py              - Unit tests for leakage-safe model-local learned preprocessing.
+    │   │   └── test_validation.py                 - Unit tests for model-ready feature and filtered-label validation contracts.
+    │   └── preprocessing/
+    │       ├── __init__.py                        - Preprocessing test package marker.
+    │       ├── test_nodes.py                      - Unit tests for split and deterministic feature-engineering behavior.
+    │       ├── test_pipeline.py                   - Unit tests for preprocessing pipeline assembly and registry composition.
+    │       └── test_validation.py                 - Unit tests for fail-fast raw data and modeling input validation contracts.
+    └── serving/
+        ├── __init__.py                            - Serving test package marker.
+        └── test_app.py                            - Unit tests for the health endpoint, prediction endpoint (full input, omitted/null nullable fields, model-not-loaded 503), and model loading.
 ```
 
 ## Local Data Setup
@@ -178,9 +181,15 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 - Explainability outputs:
   - `data/08_reporting/random_forest_shap_summary.csv`
   - `data/08_reporting/random_forest_shap_summary_plot.png`
-- The separate `data_drift` pipeline compares each shared `X_train` and `X_test` feature with a two-sample Kolmogorov-Smirnov test.
-- Features with `p_value < data_drift.significance_threshold` are marked as drifted; the default threshold is `0.05`.
-- Drift output: `data/08_reporting/drift_report.csv`
+- The separate `data_drift` pipeline runs two scenarios:
+  1. A sanity baseline comparing each shared `X_train` and `X_test` feature with a two-sample Kolmogorov-Smirnov test. Since both splits come from the same random split of the same dataset, this is expected to show little to no drift.
+  2. A simulated production scenario: `simulate_production_drift` perturbs the raw measurements in `X_test` with a hypothetical but realistic shift (a treatment plant changing its disinfection process — lower pH, higher chloramines, sulfate, and trihalomethanes) and recomputes the engineered features the same way training does. `evaluate_model_under_simulated_drift` then scores the persisted Random Forest bundle on this sample so the resulting metric degradation is visible directly, not just inferred from the drift report.
+- Features with `p_value < data_drift.significance_threshold` are marked as drifted; the default threshold is `0.05`. The simulated shift amounts are configured under `data_drift.simulated_shift` in `parameters.yml`.
+- Drift outputs:
+  - `data/08_reporting/drift_report.csv` (baseline X_train vs. X_test)
+  - `data/08_reporting/simulated_drift_report.csv` (baseline vs. simulated production sample)
+  - `data/08_reporting/simulated_drift_metrics.csv` (Random Forest test metrics on the simulated sample, comparable to `random_forest_test_metrics.csv`)
+- The simulated drift scenario additionally requires `data/06_models/random_forest_model.pkl` and `data/03_primary/y_test.pkl` — see "Running The Pipeline" below.
 
 ## Running The Pipeline
 

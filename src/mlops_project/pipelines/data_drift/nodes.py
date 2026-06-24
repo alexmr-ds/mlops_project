@@ -7,6 +7,21 @@ from typing import Any
 import pandas as pd
 from scipy import stats
 
+from mlops_project.modeling import evaluation as modeling_evaluation
+from mlops_project.pipelines.preprocessing.nodes import _engineer_feature_frame
+
+_RAW_MEASUREMENT_COLUMNS = [
+    "ph",
+    "Hardness",
+    "Solids",
+    "Chloramines",
+    "Sulfate",
+    "Conductivity",
+    "Organic_carbon",
+    "Trihalomethanes",
+    "Turbidity",
+]
+
 
 def detect_feature_drift(
     X_train: pd.DataFrame,
@@ -44,3 +59,45 @@ def detect_feature_drift(
 
     report = pd.DataFrame(rows, columns=["feature", "ks_statistic", "p_value", "drifted"])
     return report
+
+
+def simulate_production_drift(
+    X_test: pd.DataFrame,
+    parameters: dict[str, Any],
+) -> pd.DataFrame:
+    """Simulate a production sample whose raw measurements have shifted.
+
+    X_train and X_test in this project come from the same random split of the
+    same dataset, so comparing them with the KS test mostly checks that the split
+    was done correctly -- it is not a real drift scenario. To exercise the drift
+    detector and the model the way they would actually be used in production, we
+    apply a hypothetical but realistic shift (e.g. a treatment plant changing its
+    disinfection process) to the raw measurements and recompute the engineered
+    features from the perturbed values, exactly as `_engineer_feature_frame` does
+    during training.
+    """
+    shifts = parameters.get("simulated_shift", {})
+
+    perturbed_raw = X_test[_RAW_MEASUREMENT_COLUMNS].copy()
+    for column, shift_amount in shifts.items():
+        if column in perturbed_raw.columns:
+            perturbed_raw[column] = perturbed_raw[column] + float(shift_amount)
+
+    simulated = _engineer_feature_frame(perturbed_raw)
+    return simulated.reindex(columns=X_test.columns)
+
+
+def evaluate_model_under_simulated_drift(
+    model: Any,
+    simulated_X_test: pd.DataFrame,
+    y_test: pd.Series,
+) -> pd.DataFrame:
+    """Score the trained model on the simulated production sample.
+
+    Reuses the same metric calculation as the regular test evaluation
+    (`evaluation.evaluate_model`) so the resulting row can be compared directly
+    against e.g. `random_forest_test_metrics` to see how far performance drops
+    once the input distribution no longer matches what the model was trained on.
+    """
+    metrics_frame, _ = modeling_evaluation.evaluate_model(model, simulated_X_test, y_test)
+    return metrics_frame

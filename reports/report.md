@@ -45,7 +45,7 @@ We trained five model families in order of complexity: a logistic regression bas
 
 In the final sprint we added the three production-readiness components. SHAP explainability was added for the best-performing model to understand which features drive predictions. A data drift detection pipeline using KS tests was built to monitor whether the feature distributions seen in deployment diverge from the training baseline. Finally, we containerised the Random Forest model bundle as a FastAPI REST API so the classifier can be queried without any Python environment setup.
 
-**Deliverable:** SHAP summary plot, `data/08_reporting/drift_report.csv`, `Dockerfile`, `docker-compose.yml`, and this report.
+**Deliverable:** SHAP summary plot, `data/08_reporting/drift_report.csv` and `simulated_drift_report.csv`, `Dockerfile`, `docker-compose.yml`, and this report.
 
 ---
 
@@ -111,7 +111,7 @@ pH dominates, consistent with domain knowledge: it is the single most commonly m
 
 **Data scale.** The pipeline uses Pandas, which loads the entire dataset into memory on a single machine. That is not a problem for this 3,276-row dataset, but if applied to a continuous monitoring system producing millions of samples per day, Pandas would become a bottleneck. Mitigation: move to a distributed backend (Parquet on S3, PySpark or Polars transforms) — we estimate roughly three additional weeks of engineering effort.
 
-**Model drift.** Water quality can shift seasonally or after infrastructure events (pipe corrosion, treatment changes). The KS-based drift pipeline (`kedro run --pipeline=data_drift`) is a first early-warning signal: when feature distributions diverge from the training baseline, a retraining run should be triggered. In production this check should run automatically on a rolling window of incoming data rather than on demand.
+**Model drift.** Water quality can shift seasonally or after infrastructure events (pipe corrosion, treatment changes). Comparing the training split against the held-out test split with the KS test, as a sanity baseline, flags only 2 of 32 features (about the false-positive rate expected from random sampling) — the two splits come from the same distribution, so this confirms the split is sound but is not itself a drift scenario. To see the pipeline react to an actual shift, we simulated a production sample where a treatment plant changes its disinfection process (lower pH, higher chloramines, sulfate, and trihalomethanes) by perturbing the raw measurements in the test split and recomputing the engineered features. Against this simulated sample, the same KS test now flags 18 of 32 features, and the Random Forest's test ROC-AUC drops from 0.678 to 0.563 (accuracy from 0.638 to 0.569). This is the kind of signal that should trigger a retraining run in production; the check should run automatically on a rolling window of incoming data rather than on demand.
 
 **Class imbalance.** The 61/39 split is manageable but not negligible — the logistic regression baseline in particular struggles with recall on the minority (potable) class. A production system would need a deliberate cost-sensitivity analysis (e.g., SMOTE or class-weighted loss) if the cost of false negatives were higher than in this proof of concept.
 

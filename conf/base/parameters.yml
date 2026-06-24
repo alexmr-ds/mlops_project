@@ -294,3 +294,13 @@ modeling:
 data_drift:
   # p-value threshold for the two-sample KS test; features with p < threshold are flagged as drifted
   significance_threshold: 0.05
+  # Simulated production scenario: a disinfection process change at the treatment
+  # plant (heavier chlorination) that pushes pH down and chloramines/sulfate/THM up.
+  # These are additive shifts applied to the raw measurements in X_test before the
+  # engineered features are recomputed, so we can see how the model and drift
+  # detector react to a sample that no longer looks like the training distribution.
+  simulated_shift:
+    ph: -1.2
+    Chloramines: 3.0
+    Sulfate: 80.0
+    Trihalomethanes: 40.0

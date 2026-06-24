@@ -225,3 +225,15 @@ random_forest_shap_summary_plot:
 drift_report:
   type: mlops_project.datasets.PandasCSVDataset
   filepath: data/08_reporting/drift_report.csv
+
+simulated_X_test:
+  type: mlops_project.datasets.PickleDataset
+  filepath: data/03_primary/simulated_X_test.pkl
+
+simulated_drift_report:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/simulated_drift_report.csv
+
+simulated_drift_metrics:
+  type: mlops_project.datasets.PandasCSVDataset
+  filepath: data/08_reporting/simulated_drift_metrics.csv

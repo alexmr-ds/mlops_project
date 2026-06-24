@@ -128,10 +128,12 @@ def predict(sample: WaterSample) -> PredictionResponse:
     if _model is None:
         raise HTTPException(status_code=503, detail="Model not loaded yet.")
 
-    # Build a single-row feature frame from the raw measurements, then apply
-    # the same deterministic feature engineering used during training so the
-    # model bundle receives the 32-column input it was fitted on.
-    raw_frame = pd.DataFrame([sample.model_dump()])
+    # Build a single-row feature frame from the raw measurements. When a
+    # nullable field (ph, Sulfate, Trihalomethanes) is omitted, model_dump()
+    # produces a None, which makes pandas infer an object dtype for that
+    # column -- coerce everything to numeric (None -> NaN) before feature
+    # engineering so the bundle's preprocessor sees float columns throughout.
+    raw_frame = pd.DataFrame([sample.model_dump()]).apply(pd.to_numeric, errors="coerce")
     feature_frame = _engineer_feature_frame(raw_frame)
 
     prediction = int(_model.predict(feature_frame)[0])

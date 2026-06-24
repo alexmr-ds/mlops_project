@@ -200,6 +200,8 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 
 The per-model modeling and data drift pipelines expect preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.
 
+The `data_drift` pipeline additionally needs `data/06_models/random_forest_model.pkl` and `data/03_primary/y_test.pkl` for its simulated-drift evaluation step (`evaluate_model_under_simulated_drift_node`), which scores the trained Random Forest on a simulated production sample. Run `uv run kedro run --pipeline modeling_random_forest` (or `modeling`) first if the model artifact is missing.
+
 ## Serving Predictions
 
 The API loads `data/06_models/random_forest_model.pkl` at startup. Generate that artifact with the default pipeline, aggregate `modeling` pipeline, or `modeling_random_forest` pipeline before starting the service.

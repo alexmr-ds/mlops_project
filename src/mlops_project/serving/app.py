@@ -30,8 +30,9 @@ from pydantic import BaseModel, Field
 from mlops_project.pipelines.preprocessing.nodes import _engineer_feature_frame
 
 # ---------------------------------------------------------------------------
-# Model loading — done once at import time so every request reuses the same
-# fitted bundle without the overhead of re-deserialising from disk.
+# Model loading — done once in the lifespan startup hook so every request
+# reuses the same fitted bundle without the overhead of re-deserialising from
+# disk on every call.
 # ---------------------------------------------------------------------------
 
 _MODEL_PATH = Path("data/06_models/random_forest_model.pkl")

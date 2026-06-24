@@ -2,6 +2,31 @@
 
 Current scope: an end-to-end Kedro MLOps proof of concept for the water potability dataset. It includes local Kaggle data setup, fail-fast Great Expectations validation, deterministic feature engineering, leakage-safe learned preprocessing, cross-validated LogisticRegression and Optuna-tuned tree-model comparison, final holdout evaluation, MLflow experiment tracking and snapshot sharing, Random Forest SHAP explainability, KS-test feature drift reporting, prediction-ready model bundles, and FastAPI serving through local or Docker execution. Exploratory analysis remains available under `notebooks/`.
 
+## Quickstart
+
+The fastest path from a fresh clone to seeing everything run:
+
+```bash
+uv sync
+uv run python main.py setup-data              # one-time Kaggle download into data/raw/
+uv run kedro run                               # preprocessing + all 5 models + SHAP
+uv run kedro run --pipeline data_drift         # drift baseline + simulated production drift scenario
+uv run mlflow ui --backend-store-uri mlruns    # browse the runs just created, at http://localhost:5000
+```
+
+Note that the default `kedro run` pipeline is `preprocessing + modeling` only; it does **not** include `data_drift`, which is registered as a separate pipeline and has to be run explicitly with the third command above. Skipping it means missing the simulated production drift scenario and the resulting model metric degradation, which is one of the more notable results in `reports/report.md`.
+
+To see the Kedro pipeline graph in a browser instead of just running it:
+
+```bash
+uv sync --group viz
+uv run kedro viz run
+```
+
+This opens at `http://localhost:4141`. Kedro-Viz is a separate, optional dependency group (`viz` in `pyproject.toml`) since it is a visualization tool for development, not something the model code depends on.
+
+If you would rather inspect what is already committed than run anything yourself, see "Verifying The Report Without Running Anything" below.
+
 ## Repository Tree
 
 ```text
@@ -195,7 +220,7 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 
 1. Install dependencies with `uv sync`.
 2. Run `uv run python main.py setup-data` to prepare `data/raw/water_potability.csv`.
-3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`.
+3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`. The default pipeline is `preprocessing + modeling`; it does not include `data_drift` (step 10 below).
 4. Run only preprocessing with `uv run kedro run --pipeline preprocessing`.
 5. Run only LogisticRegression with `uv run kedro run --pipeline modeling_logistic_regression`.
 6. Run only RandomForest with `uv run kedro run --pipeline modeling_random_forest`. This runs Optuna tuning first, then refits and evaluates the selected RandomForest once on the final holdout split.
@@ -206,6 +231,7 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 11. Inspect persisted outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
 12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns` (only after running at least one modeling pipeline: `mlruns/` is gitignored and does not exist until the first local run creates it; the UI starts fine on a fresh clone but shows no experiments until then). To browse historical runs without training anything yourself, see the read-only `mlflow_snapshot/` export under "MLflow Snapshot Sharing" below instead.
 13. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
+14. Visualize the pipeline graph with `uv sync --group viz` then `uv run kedro viz run` (serves at `http://localhost:4141`). This is the optional `viz` dependency group in `pyproject.toml`, separate from the model code.
 
 The per-model modeling and data drift pipelines expect preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.
 
@@ -263,6 +289,16 @@ uv run mlflow server \
 Open the MLflow UI URL printed by the server and inspect the `water_potability_modeling` experiment. If the installed MLflow version requires `mlflow ui` instead of `mlflow server` for local inspection, use the same `--backend-store-uri sqlite:///mlflow_snapshot/mlflow.db` value.
 
 This snapshot is not a multi-user writable backend. New local runs always go through the local, gitignored `mlruns` tracking URI; refresh the snapshot only when you want to export another point-in-time view for sharing.
+
+## Verifying The Report Without Running Anything
+
+Every number, table, and plot referenced in `reports/report.md` is backed by a file already committed to this repository, so a grader can check them directly without installing anything or running the pipeline:
+
+- Model comparison table (Section 3.3): `data/08_reporting/model_comparison.csv`, and per-model detail in `data/08_reporting/{model_name}_test_metrics.csv` and `{model_name}_test_confusion_matrix.{csv,png}`.
+- SHAP feature importance (Section 3.4): `data/08_reporting/random_forest_shap_summary.csv` and `random_forest_shap_summary_plot.png`.
+- Drift baseline and simulated production scenario (Section 4.2): `data/08_reporting/drift_report.csv`, `simulated_drift_report.csv`, and `simulated_drift_metrics.csv` (compare against `random_forest_test_metrics.csv` for the before/after degradation).
+- Trained model bundles themselves: `data/06_models/{model_name}_model.pkl`.
+- MLflow run history (params, metrics, tags, per-run artifacts) without training anything: the committed `mlflow_snapshot/` export, browsable with the `mlflow server --backend-store-uri sqlite:///mlflow_snapshot/mlflow.db` command above. Note that the live `mlflow.db` and `mlruns/` at the repository root are **not** committed (gitignored, local-only, recreated on first run); `mlflow_snapshot/mlflow.db` and `mlflow_snapshot/mlruns/` are the committed, browsable copies.
 
 ## Data Convention
 

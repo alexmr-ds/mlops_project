@@ -1,9 +1,11 @@
 """Unit tests for the FastAPI serving layer."""
 
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from fastapi import HTTPException
 from sklearn.ensemble import RandomForestClassifier
 
 from mlops_project.modeling.model_bundle import ModelBundle
@@ -105,6 +107,42 @@ class PredictEndpointTests(unittest.TestCase):
 
         self.assertIn(response.prediction, (0, 1))
         self.assertTrue(0.0 <= response.probability <= 1.0)
+
+    def test_predict_raises_503_when_model_not_loaded(self) -> None:
+        serving_app._model = None
+
+        with self.assertRaises(HTTPException) as raised:
+            serving_app.predict(self._full_sample())
+
+        self.assertEqual(raised.exception.status_code, 503)
+
+
+class HealthEndpointTests(unittest.TestCase):
+    """Tests for the /health handler."""
+
+    def test_health_returns_ok_status_and_model_name(self) -> None:
+        response = serving_app.health()
+
+        self.assertEqual(response, {"status": "ok", "model": "random_forest"})
+
+
+class LoadModelTests(unittest.TestCase):
+    """Tests for _load_model's startup loading behaviour."""
+
+    def test_raises_file_not_found_when_model_artifact_is_missing(self) -> None:
+        original_path = serving_app._MODEL_PATH
+        serving_app._MODEL_PATH = Path("data/06_models/does_not_exist.pkl")
+        try:
+            with self.assertRaisesRegex(FileNotFoundError, "Run 'kedro run --pipeline=modeling'"):
+                serving_app._load_model()
+        finally:
+            serving_app._MODEL_PATH = original_path
+
+    def test_loads_the_persisted_model_bundle(self) -> None:
+        loaded = serving_app._load_model()
+
+        self.assertTrue(hasattr(loaded, "predict"))
+        self.assertTrue(hasattr(loaded, "predict_proba"))
 
 
 if __name__ == "__main__":

@@ -195,7 +195,7 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 9. Run only XGBoost with `uv run kedro run --pipeline modeling_xgboost`.
 10. Run drift detection with `uv run kedro run --pipeline data_drift`.
 11. Inspect persisted outputs under `data/03_primary/`, `data/06_models/`, and `data/08_reporting/`.
-12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns`.
+12. Inspect MLflow runs with `uv run mlflow ui --backend-store-uri mlruns` (only after running at least one modeling pipeline — `mlruns/` is gitignored and does not exist until the first local run creates it; the UI starts fine on a fresh clone but shows no experiments until then). To browse historical runs without training anything yourself, see the read-only `mlflow_snapshot/` export under "MLflow Snapshot Sharing" below instead.
 13. Audit local MLflow stores for secret-like content with `uv run python main.py audit-mlflow-secrets`.
 
 The per-model modeling and data drift pipelines expect preprocessing artifacts under `data/03_primary/`. Run `uv run kedro run --pipeline preprocessing` first if those artifacts are missing or stale. The aggregate `modeling` pipeline and default pipeline also produce Random Forest SHAP outputs; the standalone `modeling_random_forest` pipeline does not.

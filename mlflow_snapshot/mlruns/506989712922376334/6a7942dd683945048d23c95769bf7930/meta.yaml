@@ -1,4 +1,4 @@
-artifact_uri: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/6a7942dd683945048d23c95769bf7930/artifacts
+artifact_uri: mlflow_snapshot/mlruns/506989712922376334/6a7942dd683945048d23c95769bf7930/artifacts
 end_time: 1782342936383
 entry_point_name: ''
 experiment_id: '506989712922376334'

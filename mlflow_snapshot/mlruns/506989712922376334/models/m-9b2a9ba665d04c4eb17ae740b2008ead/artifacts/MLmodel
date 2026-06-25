@@ -1,4 +1,4 @@
-artifact_path: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/models/m-9b2a9ba665d04c4eb17ae740b2008ead/artifacts
+artifact_path: mlflow_snapshot/mlruns/506989712922376334/models/m-9b2a9ba665d04c4eb17ae740b2008ead/artifacts
 flavors:
   python_function:
     artifacts:

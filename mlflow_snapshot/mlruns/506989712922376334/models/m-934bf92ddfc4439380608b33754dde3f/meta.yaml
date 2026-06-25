@@ -1,4 +1,4 @@
-artifact_location: /Users/mehmet/src/mlops_project/mlruns/506989712922376334/models/m-934bf92ddfc4439380608b33754dde3f/artifacts
+artifact_location: mlflow_snapshot/mlruns/506989712922376334/models/m-934bf92ddfc4439380608b33754dde3f/artifacts
 creation_timestamp: 1782342936037
 experiment_id: '506989712922376334'
 last_updated_timestamp: 1782342936165

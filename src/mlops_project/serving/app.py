@@ -29,9 +29,18 @@ from pydantic import BaseModel, Field
 # the 32-column engineered frame, not the original 9 water quality measurements.
 from mlops_project.pipelines.preprocessing.nodes import _engineer_feature_frame
 
+# Champion selection is a deliberate manual promotion gate, not derived at
+# runtime. Extra Trees is the top-ranked model in data/08_reporting/
+# model_comparison.csv, so it is promoted here on purpose. The same manual
+# choice is mirrored by the drift and SHAP pipeline inputs. If a re-tune
+# re-ranks the models, re-promote by changing CHAMPION_MODEL_NAME here and the
+# matching catalog inputs; tests/test_champion_promotion.py fails fast if this
+# name ever drifts from the top of the committed comparison table.
+CHAMPION_MODEL_NAME = "extra_trees"
+
 # Loaded once in the lifespan startup hook below so every request reuses the
 # same fitted bundle instead of re-deserialising it from disk each time.
-_MODEL_PATH = Path("data/06_models/extra_trees_model.pkl")
+_MODEL_PATH = Path(f"data/06_models/{CHAMPION_MODEL_NAME}_model.pkl")
 _model: Any = None
 
 
@@ -104,7 +113,7 @@ class PredictionResponse(BaseModel):
 @app.get("/health")
 def health() -> dict[str, str]:
     """Confirm the model is loaded and the API is up."""
-    return {"status": "ok", "model": "extra_trees"}
+    return {"status": "ok", "model": CHAMPION_MODEL_NAME}
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -112,8 +121,8 @@ def predict(sample: WaterSample) -> PredictionResponse:
     """Predict whether the given water sample is potable.
 
     Runs the input through the model bundle's fitted preprocessing pipeline
-    (outlier-aware imputation, scaling, feature selection) before the Random
-    Forest estimator produces its prediction.
+    (outlier-aware imputation, scaling, feature selection) before the Extra
+    Trees estimator produces its prediction.
     """
     if _model is None:
         raise HTTPException(status_code=503, detail="Model not loaded yet.")

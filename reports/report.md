@@ -12,38 +12,38 @@ The dataset contains 3,276 water samples, each described by nine physicochemical
 
 We defined success along two dimensions before any modelling began:
 
-- **Primary metric (ROC-AUC ≥ 0.65 on the test split):** ROC-AUC is threshold-independent and handles class imbalance better than accuracy, making it the right choice for comparing models across the development phase.
-- **Secondary metric (test F1 ≥ 0.45 for the positive class):** In a water safety context, failing to flag unsafe water (false negatives) is more costly than wrongly flagging safe water, so recall matters alongside precision.
+- **Success threshold 1 (ROC-AUC ≥ 0.65 on the held-out test split):** ROC-AUC is threshold-independent and handles class imbalance better than accuracy, so it is our headline measure of whether a model learned real signal rather than guessing.
+- **Success threshold 2 (test F1 ≥ 0.45 for the positive class):** In a water safety context, failing to flag unsafe water (false negatives) is more costly than wrongly flagging safe water, so recall matters alongside precision.
 
-We considered our pipeline successful if the best model cleared both thresholds on the untouched test split.
+We considered our pipeline successful if the best model cleared both thresholds on the untouched test split. These thresholds are reporting bars, evaluated once on the holdout after the model is chosen; they are deliberately separate from the metric used to *select* models during development (CV F1, see Section 3.3).
 
 ---
 
 ## 2. Project Planning
 
-We organised the work into four iterative sprints loosely inspired by the agile methodology. Each sprint had a clear deliverable and a definition of done.
+We did not run formal time-boxed sprints. Instead we organised the work as a sequence of dependency-ordered phases, each gated by a concrete, committed deliverable that had to be working before the next phase began. The ordering was driven by data dependencies rather than a calendar: every phase consumes the artifacts produced by the previous one, which is also why the same structure maps cleanly onto the Kedro pipeline DAG, and progress was tracked through Git with each milestone landing as a self-contained commit. The only agile influence is that earlier phases were revisited rather than frozen; for example, the data contract and validation nodes were re-run and adjusted after feature engineering changed the feature schema. The four phases below follow that order.
 
-### Sprint 1: Exploratory Analysis and Data Contract (Week 1)
+### Phase 1: Exploratory Analysis and Data Contract
 
-We started by exploring the dataset in `notebooks/EDA.ipynb` to understand feature distributions, missingness, and class balance before writing a single line of pipeline code. The main findings (near-Gaussian distributions, three nullable features, and a 61/39 class split) directly shaped every preprocessing decision made in Sprint 2. We also defined a Great Expectations raw data contract as the formal definition of what constitutes acceptable input, encoding the agreed missingness limits and physically plausible ranges for each measurement.
+We started by exploring the dataset in `notebooks/EDA.ipynb` to understand feature distributions, missingness, and class balance before writing a single line of pipeline code. The main findings (near-Gaussian distributions, three nullable features, and a 61/39 class split) directly shaped every preprocessing decision made in the next phase. We also defined a Great Expectations raw data contract as the formal definition of what constitutes acceptable input, encoding the agreed missingness limits and physically plausible ranges for each measurement.
 
 **Deliverable:** EDA notebook, `reports/eda_findings.md`, and a fail-fast Great Expectations validation node in the Kedro pipeline.
 
-### Sprint 2: Preprocessing Pipeline (Week 2)
+### Phase 2: Preprocessing Pipeline
 
 With the data contract in place, we built the full Kedro preprocessing pipeline: stratified 85/15 train/test splitting, deterministic feature engineering (23 derived features from domain knowledge), training-only outlier removal, fold-local mean imputation and standard scaling, and RFECV-based feature selection. The key architectural decision was to move all learned preprocessing inside each CV fold rather than fitting it once on the full training set, which eliminates any leakage of validation statistics into the feature transformation.
 
 **Deliverable:** `src/mlops_project/pipelines/preprocessing/`, 26 unit tests, and persisted `X_train.pkl`, `X_test.pkl`, `y_train.pkl`, `y_test.pkl`.
 
-### Sprint 3: Modelling, Tuning, and MLflow (Weeks 3-4)
+### Phase 3: Modelling, Tuning, and MLflow
 
 We trained five model families in order of complexity: a logistic regression baseline followed by four tree-based classifiers (Random Forest, Extra Trees, Histogram Gradient Boosting, XGBoost). For each tree model, we ran an Optuna hyperparameter search on training-set-only stratified CV before fitting the final model on the full training set and evaluating it once on the test split. All experiments were tracked in MLflow, with per-run artifacts including CV fold metrics, Optuna trial logs, the best hyperparameters, and the serialised model bundle.
 
 **Deliverable:** `src/mlops_project/pipelines/modeling/`, MLflow experiment `water_potability_modeling`, `data/08_reporting/model_comparison.csv`.
 
-### Sprint 4: Explainability, Drift Detection, and Serving (Week 5)
+### Phase 4: Explainability, Drift Detection, and Serving
 
-In the final sprint we added the three production-readiness components. SHAP explainability was added for the best-performing model (Extra Trees) to understand which features drive predictions. A data drift detection pipeline using KS tests was built to monitor whether the feature distributions seen in deployment diverge from the training baseline. Finally, we containerised the Extra Trees model bundle as a FastAPI REST API so the classifier can be queried without any Python environment setup.
+In the final phase we added the three production-readiness components. SHAP explainability was added for the best-performing model (Extra Trees) to understand which features drive predictions. A data drift detection pipeline using KS tests was built to monitor whether the feature distributions seen in deployment diverge from the training baseline. Finally, we containerised the Extra Trees model bundle as a FastAPI REST API so the classifier can be queried without any Python environment setup.
 
 **Deliverable:** SHAP summary plot, `data/08_reporting/drift_report.csv` and `simulated_drift_report.csv`, `Dockerfile`, `docker-compose.yml`, and this report.
 
@@ -65,7 +65,7 @@ The EDA revealed three important characteristics of the dataset, visible in the 
 
 **Selective missingness.** Only pH (15.0 %), sulfate (23.8 %), and trihalomethanes (4.9 %) have missing values. All three are nullable by domain convention: instruments occasionally produce out-of-range readings that are recorded as absent rather than zero. Mean imputation fitted per training fold handles these gaps without leaking evaluation-split statistics into the transform.
 
-**Moderate class imbalance.** 39 % of samples are potable, 61 % are not. Stratified splitting and CV folds preserve this ratio across every subset, and ROC-AUC is the primary development metric precisely because it is threshold-invariant.
+**Moderate class imbalance.** 39 % of samples are potable, 61 % are not. Stratified splitting and CV folds preserve this ratio across every subset, and our ROC-AUC success threshold is chosen precisely because it is threshold-invariant and robust to this imbalance.
 
 ### 3.2 Feature Engineering
 
@@ -85,7 +85,7 @@ All models were evaluated with 5-fold stratified cross-validation on the trainin
 | 4 | XGBoost | 0.415 ± 0.049 | 0.674 | 0.506 |
 | 5 | Logistic Regression | 0.132 ± 0.077 | 0.551 | 0.136 |
 
-Models are selected by the primary development metric (CV F1), which is computed on the training split only, before the test set is touched. Extra Trees achieves the highest CV F1 (0.498) and is therefore the champion that we serve, explain, and monitor for drift; its test ROC-AUC of 0.666 and test F1 of 0.574 clear both success thresholds from Section 1. The top three tree ensembles are statistically very close on CV F1 (0.498 / 0.489 / 0.485, all within one CV standard deviation of about 0.04), and on the test split Hist. Gradient Boosting edges slightly ahead on ROC-AUC (0.682), but model selection is fixed on the development metric, not the holdout. The logistic regression baseline, while stable (low CV std), is far behind the tree models, confirming the relationship between water quality and potability is not well captured by a linear boundary.
+Models are selected by the primary development metric (CV F1), computed on the training split only, before the test set is touched. This is the development selection criterion and is deliberately distinct from the ROC-AUC success threshold in Section 1: ROC-AUC is a reporting bar checked once on the holdout, never a selection signal. Extra Trees achieves the highest CV F1 (0.498) and is therefore the champion that we serve, explain, and monitor for drift; its test ROC-AUC of 0.666 and test F1 of 0.574 clear both success thresholds from Section 1. We want to be explicit that this selection is statistically fragile. The top three tree ensembles (Extra Trees 0.498, Hist. Gradient Boosting 0.489, Random Forest 0.485) all fall within one CV standard deviation (about 0.044) of the best score, so under a one-standard-error rule they are effectively tied and the ranking among them is within noise. Extra Trees is promoted because it leads on the point estimate of the primary development metric and also holds the best holdout test F1 (0.5743, fractionally above Hist. Gradient Boosting's 0.5735; both round to 0.574 in the table above), which serves as the tiebreak, while Hist. Gradient Boosting edges ahead only on test ROC-AUC (0.682). Because that margin is so small, the champion is fixed by a deliberate manual promotion gate (see Section 4.2), not derived automatically, and a re-tune that re-ranked these three would be a legitimate reason to re-promote. The logistic regression baseline, while stable (low CV std), is far behind the tree models, confirming the relationship between water quality and potability is not well captured by a linear boundary.
 
 It is worth being direct about what "clearing the thresholds" means here: a ROC-AUC of 0.666 and an accuracy of 0.650 are real but modest, closer to "somewhat better than a coin flip" than to a deployable diagnostic tool, and the same pattern holds for every model family we tried, not just ours. This is consistent with how the dataset is known to behave: the Kaggle Water Potability dataset's labels are synthetically generated and only weakly tied to the nine physicochemical features, so even an ideal classifier cannot push performance much further without additional, more informative measurements. We set the thresholds in Section 1 specifically at a level that separates "the model learned a real, non-trivial signal" from "the model is guessing," and Extra Trees clears that bar, but readers should not mistake it for a clinically usable potability test. The honest conclusion is that the production-readiness work in Section 4 (serving, drift monitoring, retraining triggers) is the more transferable outcome of this project than the absolute accuracy of the classifier itself.
 
@@ -123,7 +123,7 @@ pH-related features dominate, consistent with domain knowledge: pH is the single
 
 **Class imbalance.** The 61/39 split is manageable but not negligible: the logistic regression baseline in particular struggles with recall on the minority (potable) class. A production system would need a deliberate cost-sensitivity analysis (e.g., SMOTE or class-weighted loss) if the cost of false negatives were higher than in this proof of concept.
 
-**Single-model serving.** The API currently serves only the Extra Trees champion; if a future comparison ranked a different model higher, the Dockerfile and model path would need a manual update. A more mature setup would pull the model from the MLflow registry by alias (`models:/water_potability@champion`) so serving always tracks the latest promoted model.
+**Manual champion promotion.** Champion selection is a deliberate manual gate rather than a runtime decision. The winning model (Extra Trees, the top of `model_comparison.csv`) is hardcoded in three places: the serving model path, the drift evaluation input, and the SHAP input. Nothing promotes the winner programmatically, so if a re-tune re-ranked the models, those three sites (and the Dockerfile model path) would need a conscious manual update. We make this gate explicit and fail-fast with a guard test (`tests/test_champion_promotion.py`) that asserts the served champion is still the top of the committed comparison table, so the hardcoded choice cannot silently drift from the data. A more mature setup would instead pull the model from the MLflow registry by alias (`models:/water_potability@champion`) so serving always tracks the latest promoted model.
 
 ---
 

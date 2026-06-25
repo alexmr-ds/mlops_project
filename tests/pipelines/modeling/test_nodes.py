@@ -13,6 +13,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
+from mlops_project.modeling import evaluation as modeling_evaluation
 from mlops_project.modeling import model_bundle
 from mlops_project.pipelines.modeling import nodes
 
@@ -49,35 +50,6 @@ class ModelingNodeTests(unittest.TestCase):
         self.assertListEqual(matrix.columns.tolist(), [0, 1])
         self.assertGreaterEqual(len(selected_features), 1)
         self.assertTrue(set(selected_features).issubset(X_train.columns))
-
-    def test_cross_validate_random_forest_returns_cv_and_test_outputs(self) -> None:
-        X_train, X_test, y_train, y_test = _modeling_artifacts()
-
-        model, cv_metrics, cv_fold_metrics, test_metrics, matrix, selected_features = (
-            nodes.cross_validate_and_train_random_forest(
-                X_train,
-                X_test,
-                y_train,
-                y_test,
-                _preprocessing_parameters(),
-                _modeling_parameters(),
-            )
-        )
-
-        self.assertIsInstance(model, model_bundle.ModelBundle)
-        self.assertIsInstance(model.estimator, RandomForestClassifier)
-        self.assertTrue(hasattr(model, 'classes_'))
-        self.assertIsNotNone(model.preprocessor.imputer)
-        self.assertIsNotNone(model.preprocessor.scaler)
-        self.assertEqual(len(model.predict(X_test)), len(X_test))
-        self.assertEqual(model.estimator.n_estimators, 10)
-        self.assertEqual(model.estimator.random_state, 73)
-        self.assertEqual(model.estimator.n_jobs, -1)
-        self.assertEqual(cv_metrics.shape, (1, 12))
-        self.assertEqual(len(cv_fold_metrics), 3)
-        self.assertEqual(test_metrics.shape, (1, 6))
-        self.assertEqual(matrix.shape, (2, 2))
-        self.assertGreaterEqual(len(selected_features), 1)
 
     def test_tune_random_forest_hyperparameters_returns_trial_artifacts(self) -> None:
         X_train, _, y_train, _ = _modeling_artifacts()
@@ -287,7 +259,7 @@ class ModelingNodeTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, 'selected_features are missing'):
-            nodes.evaluate_model(
+            modeling_evaluation.evaluate_model(
                 model,
                 X_test.drop(columns=selected_features[0]),
                 y_test,

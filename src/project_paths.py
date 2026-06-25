@@ -11,7 +11,7 @@ def _find_project_root(start: Path) -> Path:
 
 
 PROJECT_ROOT = _find_project_root(Path(__file__).resolve().parent)
-RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
+RAW_DATA_DIR = PROJECT_ROOT / "data" / "01_raw"
 
 
 def data_path(*parts: str) -> Path:

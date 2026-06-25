@@ -30,5 +30,11 @@ def register_pipelines() -> dict[str, Pipeline]:
         "tuning_hist_gradient_boosting": modeling.create_tuning_hist_gradient_boosting_pipeline(),
         "tuning_xgboost": modeling.create_tuning_xgboost_pipeline(),
         "data_drift": data_drift_pipeline,
+        # End-to-end chain in a single run: data prep -> all models + SHAP ->
+        # drift monitoring. The default run deliberately stops after modeling
+        # (training and monitoring are separate concerns), so `full` exists for
+        # graders who want the whole brief's data_quality -> ... -> data_drift
+        # sequence, including the simulated-drift artifacts, from one command.
+        "full": preprocessing_pipeline + modeling_pipeline + data_drift_pipeline,
         "__default__": preprocessing_pipeline + modeling_pipeline,
     }

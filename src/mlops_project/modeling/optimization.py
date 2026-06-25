@@ -296,10 +296,14 @@ def validate_model_parameters(model_name: str, parameters: dict[str, Any]) -> No
     validate_tuned_model_name(model_name)
     if not isinstance(parameters, dict) or not parameters:
         raise ValueError(f"{model_name} parameters must be a non-empty mapping.")
-    if "random_state" in parameters and int(parameters["random_state"]) != 73:
-        raise ValueError(f"{model_name} random_state must remain fixed at 73.")
-    if "n_jobs" in parameters and int(parameters["n_jobs"]) != -1:
-        raise ValueError(f"{model_name} n_jobs must remain fixed at -1.")
+    # Enforce the invariant (a seed must be set so runs are never accidentally
+    # unseeded), but honor whatever seed the configuration specifies. The
+    # published artifacts correspond to the committed default (random_state=73);
+    # reproducibility is a property of the config and lockfile, not of a literal
+    # pinned here. n_jobs is a performance knob with no bearing on result
+    # reproducibility, so any valid integer is accepted.
+    if "random_state" in parameters and parameters["random_state"] is None:
+        raise ValueError(f"{model_name} random_state must be set for reproducibility.")
     if model_name in N_ESTIMATOR_MODELS and "n_estimators" not in parameters:
         raise ValueError(f"{model_name} parameters must include n_estimators.")
     if model_name == "hist_gradient_boosting" and "max_iter" not in parameters:

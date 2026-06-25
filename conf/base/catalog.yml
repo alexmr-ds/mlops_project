@@ -1,6 +1,6 @@
 water_potability:
   type: mlops_project.datasets.PandasCSVDataset
-  filepath: data/raw/water_potability.csv
+  filepath: data/01_raw/water_potability.csv
 
 validated_water_potability:
   type: kedro.io.MemoryDataset

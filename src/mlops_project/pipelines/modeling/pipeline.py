@@ -276,7 +276,13 @@ def create_tuning_model_pipeline(
 
 
 def create_extra_trees_shap_pipeline(**kwargs: object) -> Pipeline:
-    """Create the SHAP explainability pipeline for the best-performing Extra Trees model."""
+    """Create the SHAP explainability pipeline for the promoted champion.
+
+    The champion (Extra Trees) is fixed here by the same deliberate manual
+    promotion gate documented in ``serving/app.py`` and the drift pipeline: it
+    is the top model in ``model_comparison.csv``. If a re-tune re-ranks the
+    models, re-promote by updating this input alongside serving and drift.
+    """
     del kwargs
     return pipeline(
         [

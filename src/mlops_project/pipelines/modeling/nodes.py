@@ -42,26 +42,6 @@ def cross_validate_and_train_logistic_regression(
     )
 
 
-def cross_validate_and_train_random_forest(
-    X_train: pd.DataFrame,
-    X_test: pd.DataFrame,
-    y_train: pd.Series,
-    y_test: pd.Series,
-    preprocessing_parameters: dict[str, Any],
-    modeling_parameters: dict[str, Any],
-) -> tuple[Any, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str]]:
-    """Cross-validate, train, and test a random forest classifier."""
-    return modeling_evaluation.cross_validate_and_train_model(
-        model_name="random_forest",
-        X_train=X_train,
-        X_test=X_test,
-        y_train=y_train,
-        y_test=y_test,
-        preprocessing_parameters=preprocessing_parameters,
-        modeling_parameters=modeling_parameters,
-    )
-
-
 def tune_random_forest_hyperparameters(
     X_train: pd.DataFrame,
     y_train: pd.Series,
@@ -356,21 +336,6 @@ def cross_validate_xgboost_with_best_params(
     )
 
 
-def evaluate_model(
-    model: Any,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
-    selected_features: list[str] | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Evaluate a fitted model on the final holdout test split."""
-    return modeling_evaluation.evaluate_model(
-        model=model,
-        X_test=X_test,
-        y_test=y_test,
-        selected_features=selected_features,
-    )
-
-
 def create_test_confusion_matrix_plot(confusion_matrix_frame: pd.DataFrame) -> Figure:
     """Create a matplotlib plot for the final test confusion matrix."""
     modeling_evaluation.validate_confusion_matrix_frame(confusion_matrix_frame)
@@ -398,11 +363,6 @@ def create_test_confusion_matrix_plot(confusion_matrix_frame: pd.DataFrame) -> F
     figure.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
     figure.tight_layout()
     return figure
-
-
-def create_confusion_matrix_plot(confusion_matrix_frame: pd.DataFrame) -> Figure:
-    """Create a matplotlib plot for a confusion matrix."""
-    return create_test_confusion_matrix_plot(confusion_matrix_frame)
 
 
 def log_model_to_mlflow(

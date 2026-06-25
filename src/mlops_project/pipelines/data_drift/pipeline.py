@@ -15,8 +15,8 @@ def create_pipeline(**kwargs: object) -> Pipeline:
     2. Training vs. a simulated production sample -- X_test with a hypothetical
        shift in the raw measurements applied, recomputed through the same
        feature engineering used at training time. This is closer to what drift
-       monitoring is actually meant to catch, and the trained Random Forest is
-       also scored on it to show the metric degradation directly.
+       monitoring is actually meant to catch, and the promoted champion (Extra
+       Trees) is also scored on it to show the metric degradation directly.
     """
     del kwargs
     return pipeline(
@@ -39,6 +39,9 @@ def create_pipeline(**kwargs: object) -> Pipeline:
                 outputs="simulated_drift_report",
                 name="detect_simulated_drift_node",
             ),
+            # ``extra_trees_model`` is the manually promoted champion (top of
+            # model_comparison.csv); see the gate note in serving/app.py. Update
+            # this input together with serving if a re-tune re-ranks the models.
             node(
                 func=nodes.evaluate_model_under_simulated_drift,
                 inputs=["extra_trees_model", "simulated_X_test", "y_test"],

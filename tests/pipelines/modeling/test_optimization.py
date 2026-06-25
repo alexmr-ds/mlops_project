@@ -85,26 +85,39 @@ class ModelOptimizationTests(unittest.TestCase):
         self.assertEqual(config['n_trials'], 2)
         self.assertIn('learning_rate', config['search_space'])
 
-    def test_validate_model_parameters_rejects_unfixed_random_state(self) -> None:
-        with self.assertRaisesRegex(ValueError, 'random_state must remain fixed at 73'):
+    def test_validate_model_parameters_accepts_non_default_random_state(self) -> None:
+        # A different seed is a valid, deterministic configuration choice; the
+        # published artifacts use the committed default (73), but the contract is
+        # "a seed is set", not "the seed is 73".
+        optimization.validate_model_parameters(
+            'xgboost',
+            {
+                'n_estimators': 20,
+                'random_state': 42,
+            },
+        )
+
+    def test_validate_model_parameters_rejects_missing_random_state(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'random_state must be set'):
             optimization.validate_model_parameters(
                 'xgboost',
                 {
                     'n_estimators': 20,
-                    'random_state': 42,
+                    'random_state': None,
                 },
             )
 
-    def test_validate_model_parameters_rejects_unfixed_n_jobs(self) -> None:
-        with self.assertRaisesRegex(ValueError, 'n_jobs must remain fixed at -1'):
-            optimization.validate_model_parameters(
-                'extra_trees',
-                {
-                    'n_estimators': 20,
-                    'random_state': 73,
-                    'n_jobs': 1,
-                },
-            )
+    def test_validate_model_parameters_accepts_single_threaded_n_jobs(self) -> None:
+        # n_jobs is a performance knob, not a reproducibility one; n_jobs=1 must
+        # be allowed (e.g. for single-core or debugging environments).
+        optimization.validate_model_parameters(
+            'extra_trees',
+            {
+                'n_estimators': 20,
+                'random_state': 73,
+                'n_jobs': 1,
+            },
+        )
 
     def test_primary_development_metric_is_shared_with_evaluation(self) -> None:
         self.assertEqual(

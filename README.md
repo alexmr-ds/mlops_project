@@ -8,13 +8,13 @@ The fastest path from a fresh clone to seeing everything run:
 
 ```bash
 uv sync
-uv run python main.py setup-data              # one-time Kaggle download into data/raw/
+uv run python main.py setup-data              # one-time Kaggle download into data/01_raw/
 uv run kedro run                               # preprocessing + all 5 models + SHAP
 uv run kedro run --pipeline data_drift         # drift baseline + simulated production drift scenario
 uv run mlflow ui --backend-store-uri mlruns    # browse the runs just created, at http://localhost:5000
 ```
 
-Note that the default `kedro run` pipeline is `preprocessing + modeling` only; it does **not** include `data_drift`, which is registered as a separate pipeline and has to be run explicitly with the third command above. Skipping it means missing the simulated production drift scenario and the resulting model metric degradation, which is one of the more notable results in `reports/report.md`.
+Note that the default `kedro run` pipeline is `preprocessing + modeling` only; it does **not** include `data_drift`, which is registered as a separate pipeline and has to be run explicitly with the third command above. Skipping it means missing the simulated production drift scenario and the resulting model metric degradation, which is one of the more notable results in `reports/report.md`. To run the entire brief sequence (data prep, all five models and SHAP, then drift monitoring) in a single command instead, use `uv run kedro run --pipeline full`. Training and monitoring are kept separate by default because they are distinct concerns, but the registered `full` pipeline exists for a one-shot end-to-end run.
 
 To see the Kedro pipeline graph in a browser instead of just running it:
 
@@ -47,7 +47,7 @@ If you would rather inspect what is already committed than run anything yourself
 │   │   └── parameters.yml                         - Runtime preprocessing, modeling, and MLflow parameters.
 │   └── local/                                     - Local Kedro environment directory required by the default config loader.
 ├── data/
-│   ├── raw/                                       - Water potability source CSV used by preprocessing.
+│   ├── 01_raw/                                    - Water potability source CSV used by preprocessing.
 │   ├── 03_primary/                                - Persisted train/test labels (y_train, y_test).
 │   ├── 04_feature/                                - File-based feature store: engineered feature sets plus versioned metadata sidecars.
 │   ├── 06_models/                                 - Persisted prediction-ready model bundles, selected features, and tuned parameters.
@@ -140,7 +140,7 @@ If you would rather inspect what is already committed than run anything yourself
    - ask whether you want it to create `~/.kaggle/kaggle.json`
    - prompt for `username` and `key`
    - set file permissions to `600`
-4. The script then downloads `adityakadiwal/water-potability` into local `data/raw/`.
+4. The script then downloads `adityakadiwal/water-potability` into local `data/01_raw/`.
 
 The repository currently includes a committed point-in-time snapshot of the raw dataset and generated artifacts under `data/03_primary/`, `data/04_feature/`, `data/06_models/`, and `data/08_reporting/`. Pipeline runs may replace these files or add new generated outputs; review those changes before committing another snapshot.
 
@@ -150,7 +150,7 @@ The repository currently includes a committed point-in-time snapshot of the raw 
 
 ## Preprocessing Behavior
 
-- Input dataset: `data/raw/water_potability.csv`
+- Input dataset: `data/01_raw/water_potability.csv`
 - Target column: `Potability`
 - EDA reference: `notebooks/EDA.ipynb`, with findings summarized in `reports/eda_findings.md`
 - Raw data validation: Great Expectations validates the loaded dataset before splitting and raises `ValueError` on contract failure
@@ -187,7 +187,7 @@ Feature-store artifacts:
 - Training data: engineered and validated `X_train` and `y_train`
 - Development evaluation: stratified k-fold cross-validation on the training split only
 - Champion model: `ExtraTreesClassifier`, which ranks first by the primary development metric (`cv_mean_f1`) in `model_comparison.csv`; it is the model used for SHAP explainability, the simulated-drift evaluation, and FastAPI serving
-- Reproducibility: the default `modeling` pipeline does **not** run Optuna. It refits each tuned model from the committed `{model}_best_params.pkl` and recomputes cross-validation deterministically, so repeated runs reproduce the same artifacts. Optuna search lives in the separate, opt-in `tuning` pipeline, which is the only thing that rewrites `{model}_best_params.pkl` and the Optuna trial logs. Optuna's TPE search is sequential and floating-point sensitive, so it is not bit-reproducible across machines; decoupling it keeps the default pipeline reproducible
+- Reproducibility: the default `modeling` pipeline does **not** run Optuna. It refits each tuned model from the committed `{model}_best_params.pkl` and recomputes cross-validation deterministically, so repeated runs reproduce the same artifacts. Optuna search lives in the separate, opt-in `tuning` pipeline, which is the only thing that rewrites `{model}_best_params.pkl` and the Optuna trial logs. Optuna's TPE search is sequential and floating-point sensitive, so it is not bit-reproducible across machines; decoupling it keeps the default pipeline reproducible. Exact reproduction of the published artifacts assumes the committed configuration (`random_state=73`); the pipeline runs deterministically under any seed you set in `conf/base/parameters.yml`, but the committed metrics, models, and plots correspond to seed `73`
 - Hyperparameter optimization (opt-in `tuning` pipeline): RandomForest uses `modeling.random_forest_optimization.n_trials=75`; ExtraTrees, HistGradientBoosting, and XGBoost each use `50` trials. All tuned model families maximize binary `cv_mean_f1` on training-set cross-validation folds only
 - Final holdout evaluation: engineered and validated `X_test` and `y_test`, evaluated once after each model is refit on all training data
 - Cross-validation config: `modeling.cross_validation.n_splits=5`, `shuffle=true`, `random_state=73`
@@ -235,7 +235,7 @@ Feature-store artifacts:
 ## Running The Pipeline
 
 1. Install dependencies with `uv sync`.
-2. Run `uv run python main.py setup-data` to prepare `data/raw/water_potability.csv`.
+2. Run `uv run python main.py setup-data` to prepare `data/01_raw/water_potability.csv`.
 3. Run the default Kedro pipeline with `.venv/bin/kedro run` or `uv run kedro run`. The default pipeline is `preprocessing + modeling`; it refits every model from the committed best parameters (no Optuna) so it is fast and reproducible, and it does not include `data_drift` (step 10) or `tuning` (step 11).
 4. Run only preprocessing with `uv run kedro run --pipeline preprocessing`.
 5. Run only LogisticRegression with `uv run kedro run --pipeline modeling_logistic_regression`.
@@ -280,9 +280,9 @@ The service listens on `http://localhost:8000` and exposes:
 
 `mlruns/` and `mlflow.db` at the repository root are **never committed**: they are gitignored and re-created fresh the first time anyone runs the modeling pipeline on their own machine. This is a hard requirement, not a style preference: a local file-store records `artifact_location` as an absolute, machine-specific path (e.g. `/Users/alexandre/Documents/mlops_project/mlruns/...`), so committing the live tracking directory and reusing it on another machine causes every artifact-logging call to fail with `PermissionError`.
 
-Instead, `mlflow_snapshot/mlruns/` is a **tracked, read-only, point-in-time file-store export**. It exists purely so a grader or teammate can browse historical params, metrics, and tags without re-running the pipeline. Because of the same absolute-path limitation, the artifact URIs recorded inside this snapshot point at the machine that generated it: metrics, params, and tags browse fine, but resolving model files, plots, or CSVs through the MLflow UI will not work on a different machine. Treat the snapshot as a reference for numbers, not a working backend.
+Instead, `mlflow_snapshot/mlruns/` is a **tracked, read-only, point-in-time file-store export**. It exists so a teammate can browse historical params, metrics, tags, and artifacts without re-running the pipeline. By default MLflow records each artifact location as an absolute path tied to the machine that produced it, which would break artifact resolution on any other clone. To keep the snapshot portable, those locations are rewritten to repository-relative paths (for example `mlflow_snapshot/mlruns/<experiment>/<run>/artifacts`). Model files, plots, and CSVs therefore resolve correctly on any clone, provided you launch the UI from the repository root so the relative paths resolve against it.
 
-Browse the archived snapshot directly from the committed file store:
+Browse the archived snapshot directly from the committed file store (run this from the repository root):
 
 ```bash
 uv run mlflow ui --backend-store-uri ./mlflow_snapshot/mlruns
@@ -300,11 +300,19 @@ uv run mlflow migrate-filestore \
 
 If MLflow reports duplicate metric rows during migration, migrate from a temporary de-duplicated copy of the file store (this project's MLflow version writes each metric history row twice). Before refreshing the committed file-store snapshot from a new training run, run `uv run python main.py audit-mlflow-secrets --tracking-dir mlflow_snapshot/mlruns` and confirm it reports zero suspicious locations.
 
-This snapshot is not a multi-user writable backend. New local runs always go through the local, gitignored `mlruns` tracking URI; refresh the snapshot only when you want to export another point-in-time view for sharing.
+This snapshot is not a multi-user writable backend. New local runs always go through the local, gitignored `mlruns` tracking URI; refresh the snapshot only when you want to export another point-in-time view for sharing. When you do refresh it, copy the freshly produced `mlruns/` into `mlflow_snapshot/mlruns/` and then re-apply the path relativization, otherwise the new export will bake in absolute machine paths again and artifacts will stop resolving on other clones. From the repository root:
+
+```bash
+grep -rl "$PWD/mlruns" mlflow_snapshot/mlruns | while read -r f; do
+  perl -i -pe "s{\Q$PWD\E/mlruns}{mlflow_snapshot/mlruns}g" "$f"
+done
+# Verify nothing absolute remains (expected output: 0):
+grep -rc "$PWD/mlruns" mlflow_snapshot/mlruns | grep -v ':0$' | wc -l
+```
 
 ## Verifying The Report Without Running Anything
 
-Every number, table, and plot referenced in `reports/report.md` is backed by a file already committed to this repository, so a grader can check them directly without installing anything or running the pipeline:
+Every number, table, and plot referenced in `reports/report.md` is backed by a file already committed to this repository to check them directly without installing anything or running the pipeline:
 
 - Model comparison table (Section 3.3): `data/08_reporting/model_comparison.csv`, and per-model detail in `data/08_reporting/{model_name}_test_metrics.csv` and `{model_name}_test_confusion_matrix.{csv,png}`.
 - SHAP feature importance (Section 3.4): `data/08_reporting/extra_trees_shap_summary.csv` and `extra_trees_shap_summary_plot.png`.

@@ -276,6 +276,39 @@ The service listens on `http://localhost:8000` and exposes:
 - `POST /predict`: accepts one JSON object containing the nine raw water-quality measurements and returns the binary prediction plus potable-class probability. `ph`, `Sulfate`, and `Trihalomethanes` may be `null`; the remaining measurements are required.
 - `GET /docs`: serves the generated OpenAPI interface and request example.
 
+### Demonstrating a prediction
+
+With the service running (`http://localhost:8000`), there are three ways to show a live prediction. Note that the base URL `/` is intentionally not a route and returns `{"detail":"Not Found"}`; use the endpoints below.
+
+**Option A: the browser (best for a live demo).** Open `http://localhost:8000/docs`, expand **POST `/predict`**, click **Try it out** (the request box is pre-filled with a valid sample), then **Execute**. The response body shows the prediction and probability.
+
+**Option B: `curl`.** Check the service, then send a sample:
+
+```bash
+curl http://localhost:8000/health
+# {"status":"ok","model":"extra_trees"}
+
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"ph":7.0,"Hardness":204.8,"Solids":20791.3,"Chloramines":7.3,"Sulfate":368.5,"Conductivity":564.3,"Organic_carbon":10.4,"Trihalomethanes":86.9,"Turbidity":2.96}'
+# {"prediction":1,"probability":0.5234}
+```
+
+`ph`, `Sulfate`, and `Trihalomethanes` may be omitted; the model's imputer fills them with the training-set mean.
+
+**Proving the served model really is Extra Trees.** The `/health` label is a string, so for hard proof inspect the loaded estimator class directly (this is the convincing demonstration):
+
+```bash
+uv run python -c "from mlops_project.serving import app; b=app._load_model(); print('serving:', type(b.estimator).__name__)"
+# serving: ExtraTreesClassifier
+```
+
+And to show it is served *because* it is the best model, the guard test asserts the served champion is the top-ranked model in `model_comparison.csv`:
+
+```bash
+uv run pytest tests/test_champion_promotion.py -v
+```
+
 ## MLflow Snapshot Sharing
 
 `mlruns/` and `mlflow.db` at the repository root are **never committed**: they are gitignored and re-created fresh the first time anyone runs the modeling pipeline on their own machine. This is a hard requirement, not a style preference: a local file-store records `artifact_location` as an absolute, machine-specific path (e.g. `/Users/alexandre/Documents/mlops_project/mlruns/...`), so committing the live tracking directory and reusing it on another machine causes every artifact-logging call to fail with `PermissionError`.

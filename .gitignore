@@ -25,6 +25,9 @@ mlflow_snapshot/mlflow.db
 # Generated report exports. Markdown reports under reports/ are tracked.
 reports/**/*.html
 reports/**/*.pdf
+# Exception: the final submission report PDF is tracked on purpose (the markdown
+# stays the single source of truth; this is the formatted deliverable).
+!reports/MLOPS.pdf
 reports/**/*.docx
 reports/**/*.tex
 reports/**/*.aux

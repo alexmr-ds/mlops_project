@@ -33,9 +33,7 @@ If you would rather inspect what is already committed than run anything yourself
 .
 ├── .gitignore                                     - Ignore rules for local environments, caches, MLflow SQLite sidecars, report exports, Kedro Viz state, and helper scripts.
 ├── .python-version                                - Python version selected for local tooling.
-├── CONTEXT.md                                     - Project language for raw data validation, learned preprocessing, model-ready validation, model evaluation, and tuning boundaries.
 ├── Dockerfile                                     - Multi-stage image definition for the FastAPI prediction service.
-├── MLOps_project.md                               - Original project brief, deliverables, and reference structure.
 ├── README.md                                      - Project overview, current scope, preprocessing behavior, and repository conventions.
 ├── docker-compose.yml                             - Local container configuration, model mount, port mapping, and API health check.
 ├── main.py                                        - CLI entrypoint for local data bootstrap and MLflow secret-audit tasks.

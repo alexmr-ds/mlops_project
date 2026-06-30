@@ -12,8 +12,6 @@ This document summarises the key observations from `notebooks/EDA.ipynb` and exp
 
 All numerical features (excluding the `Potability` target) are continuous and approximately Gaussian. The table below shows quantified skewness per feature, sorted by magnitude:
 
-![Distribution of Numerical Features](../notebooks/images/distribution_numerical_features.png)
-
 | Feature         | Skewness |
 | --------------- | -------: |
 | Solids          |   0.6216 |
@@ -71,10 +69,10 @@ The pipeline is applied in the following sequence to prevent data leakage:
 1. Stratified train / final-test split
 2. Engineered feature construction (ratios, interactions, flags)
 3. Stratified k-fold cross-validation on the training split only
-4. Per fold: outlier removal — **fold-training rows only**
-5. Per fold: mean imputation — statistics learned from cleaned fold-training rows
-6. Per fold: Z-score scaling — statistics learned from imputed fold-training rows
-7. Per fold: RFECV feature selection — **fold-training rows only**
+4. Per fold: outlier removal (**fold-training rows only**)
+5. Per fold: mean imputation, statistics learned from cleaned fold-training rows
+6. Per fold: Z-score scaling, statistics learned from imputed fold-training rows
+7. Per fold: RFECV feature selection (**fold-training rows only**)
 8. Refit the same learned preprocessing stack on the full training split
 9. Evaluate the final fitted model once on the untouched test split
 
